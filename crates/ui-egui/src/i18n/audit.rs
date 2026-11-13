@@ -186,9 +186,6 @@ impl<'a> Exempt<'a> {
             names.extend(row.tags.iter().cloned());
             names.insert(tag);
         }
-        for m in crate::credits::MODELS {
-            names.extend([m.company, m.model, m.version].map(str::to_string));
-        }
         // The spelling/grammar suggestions popup (#3340): dictionary and grammar-rule words, not
         // interface text.
         if let Some(sugg) = app.canvas.context_issue.as_ref().and_then(|i| i.get("suggestions")).and_then(Value::as_array) {
@@ -307,7 +304,6 @@ fn untranslated_interface_text() {
         "pasteSpecial",
         "about",
         "contributors",
-        "models",
         "languageData",
         "insertMergeField",
         "findRecipient",
@@ -753,7 +749,6 @@ fn the_arabic_interface_is_mirrored_and_never_panics() {
         "pasteSpecial",
         "about",
         "contributors",
-        "models",
         "insertMergeField",
         "findRecipient",
         "fieldCode",

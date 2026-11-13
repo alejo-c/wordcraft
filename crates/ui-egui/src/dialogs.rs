@@ -315,7 +315,7 @@ pub enum Dialog {
         #[serde(skip)]
         note: String,
     },
-    /// Tabs: 0 About, 1 Contributors, 2 Models.
+    /// Tabs: 0 About, 1 Contributors, 2 Language data.
     About {
         tab: u8,
     },
@@ -784,8 +784,7 @@ impl Dialog {
             "renameDocument" => Dialog::RenameDocument { name: app.title_stem(), message: String::new(), focus: true },
             "about" => Dialog::About { tab: 0 },
             "contributors" => Dialog::About { tab: 1 },
-            "models" => Dialog::About { tab: 2 },
-            "languageData" => Dialog::About { tab: 3 },
+            "languageData" => Dialog::About { tab: 2 },
             // The current list to edit, or a new one to type.
             "recipientList" | "newRecipientList" => {
                 let m = &app.session.merge;

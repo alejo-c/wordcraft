@@ -1,7 +1,6 @@
 # Contributors in the About window
 
-**About ▸ Contributors** credits everyone who contributed to WordCraft, and **About ▸ Models** credits
-the AI models named in `Co-Authored-By` trailers.
+**About ▸ Contributors** credits everyone who contributed to WordCraft.
 
 ## Decision
 
@@ -22,7 +21,7 @@ the AI models named in `Co-Authored-By` trailers.
 
 ## In WordCraft
 
-- The About window is `Dialog::About` in `crates/ui-egui/src/dialogs.rs` (Help, or Backstage ▸ About); `ui.dialog {"name":"contributors"}` / `"models"` opens a tab.
+- The About window is `Dialog::About` in `crates/ui-egui/src/dialogs.rs` (Help, or Backstage ▸ About); `ui.dialog {"name":"contributors"}` opens that tab.
 
 ## Credit yourself
 

@@ -590,23 +590,22 @@ fn title_and_account_buttons_work() {
     assert!(h.query_by_label("User name:").is_some());
 }
 
-/// The Options toggle hides the community pill in the title bar; the backstage menu's
-/// Discord link hides with it — one setting, everywhere the link shows.
+/// This branch drops the title-bar Discord pill (and its Options toggle) and the About ▸ Models tab.
 #[test]
-fn the_community_button_off_hides_the_backstage_discord_link_too() {
+fn the_custom_branch_hides_the_discord_pill_and_the_models_tab() {
     use egui_kittest::kittest::Queryable;
     let mut a = app();
-    a.run("ui.backstage", json!({"value": true})).unwrap();
+    a.run("ui.backstage", json!({"value": true, "page": "options", "pane": "general"})).unwrap();
     let mut h = harness(a);
     h.run_steps(2);
-    assert!(h.query_by_label("Discord community").is_some(), "the community link shows by default");
+    assert!(h.query_by_label("Show the community button in the title bar").is_none(), "the Options toggle for the removed title-bar button is gone");
 
     let mut a = app();
-    a.ui.show_discord = false;
-    a.run("ui.backstage", json!({"value": true})).unwrap();
+    a.run("ui.dialog", json!({"name": "about"})).unwrap();
     let mut h = harness(a);
     h.run_steps(2);
-    assert!(h.query_by_label("Discord community").is_none(), "the backstage link honors the same setting");
+    assert!(h.query_by_label("Models").is_none(), "About has no Models tab");
+    assert!(h.query_by_label("Language data").is_some(), "About keeps its Language data tab");
 }
 
 /// File › Options › Advanced › Editing: alignment guides are a UI command, on by default and
@@ -4019,7 +4018,7 @@ fn the_default_app_button_shows_only_with_the_hosts_hook() {
             a,
         );
         h.run_steps(4);
-        assert!(h.query_by_label("Show the community button in the title bar").is_some(), "hook {hook}: the Options page rendered");
+        assert!(h.query_by_label("Show the mini toolbar when text is selected").is_some(), "hook {hook}: the Options page rendered");
         assert_eq!(h.query_by_label(LABEL).is_some(), hook, "hook {hook}: the button");
         if hook {
             h.get_by_label(LABEL).click();
