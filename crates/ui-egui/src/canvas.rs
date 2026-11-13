@@ -1692,6 +1692,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         app.canvas.textures.retain(|k, _| *k < n && geo.rects.get(*k).is_some_and(|r| r.translate(content_origin.to_vec2()).intersects(near)));
         app.canvas.tiles.retain(|id, _| visible_tile_keys.contains(id));
         app.canvas.page_rects = rects.clone();
+        crate::spotlight::show(app, ui, &layout, &rects, &geo.bands);
         let view_rect = ui.clip_rect();
         if floating_comments(app) {
             // Its own layer, so presses on the card never reach the canvas under it.

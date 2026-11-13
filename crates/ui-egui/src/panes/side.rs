@@ -54,6 +54,10 @@ pub(super) fn styles(app: &mut WordApp, ui: &mut Ui) {
         .map(crate::i18n::style_name)
         .unwrap_or_else(|| st.get("styleName").and_then(Value::as_str).unwrap_or("").to_string());
     ui.label(egui::RichText::new(crate::i18n::fmt(tl!("Current style: {style}"), &[("style", &current_name)])).small());
+    let mut spotlight = app.ui.spotlight;
+    if ui.checkbox(&mut spotlight, tl!("Spotlight")).changed() {
+        let _ = app.run("ui.spotlight", json!({"value": spotlight}));
+    }
     // Wrapped: the host gives the pane a fixed width, and the row is wider than its default.
     ui.horizontal_wrapped(|ui| {
         if ui.button(tl!("New Style…")).clicked() {
@@ -76,22 +80,25 @@ pub(super) fn styles(app: &mut WordApp, ui: &mut Ui) {
     // Its handle keeps the text colour: the solid default fills it like a button, white on white here.
     ui.spacing_mut().scroll = egui::style::ScrollStyle { foreground_color: true, ..egui::style::ScrollStyle::solid() };
     ui.separator();
-    let mut list: Vec<(String, String, bool, bool)> = app
+    let mut list: Vec<(String, String, wordcraft_doc::StyleKind, bool)> = app
         .session
         .doc
         .styles
         .styles
         .iter()
         .filter(|s| !s.hidden && s.kind != wordcraft_doc::StyleKind::Table)
-        .map(|s| (s.id.clone(), crate::i18n::style_name(s), s.kind == wordcraft_doc::StyleKind::Character, s.builtin))
+        .map(|s| (s.id.clone(), crate::i18n::style_name(s), s.kind, s.builtin))
         .collect();
     list.sort_by_key(|s| s.1.to_lowercase());
     egui::ScrollArea::vertical().show(ui, |ui| {
-        for (id, name, is_char, builtin) in list {
+        for (id, name, kind, builtin) in list {
             ui.horizontal(|ui| {
+                if app.ui.spotlight && kind == wordcraft_doc::StyleKind::Paragraph {
+                    crate::spotlight::indicator(ui, &id, &name);
+                }
                 let r = ui.selectable_label(id == cur, &name);
                 ui.with_layout(crate::rtl::far_side(ui, egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new(if is_char { "a" } else { "¶" }).weak());
+                    ui.label(egui::RichText::new(if kind == wordcraft_doc::StyleKind::Character { "a" } else { "¶" }).weak());
                 });
                 if r.clicked() {
                     let _ = app.run("para.style", json!({"style": id}));
