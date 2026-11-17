@@ -49,7 +49,7 @@ fn count(v: &Value) -> Result<usize, CmdError> {
     usize::try_from(n).map_err(|_| CmdError::Params("count is too large".into()))
 }
 
-fn cursor(s: &mut Session) -> Pos {
+pub fn cursor(s: &Session) -> Pos {
     let at = s.doc.clamp(&s.sel.focus);
     if s.sel.anchor < at { caret::left(s, &at) } else { at }
 }

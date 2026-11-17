@@ -118,7 +118,7 @@ fn lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
     if bidi_para(s) {
         return visual_lr(s, v, is_left);
     }
-    mv(s, v, if is_left { left } else { right })
+    mv(s, v, if is_left { |session, pos| left(session, pos) } else { right })
 }
 
 /// Left/Right in bidirectional text: one caret position to the left or right on the screen.
@@ -152,7 +152,7 @@ fn visual_lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
     sel_result(s)
 }
 
-pub(super) fn left(s: &mut Session, p: &Pos) -> Pos {
+pub(super) fn left(s: &Session, p: &Pos) -> Pos {
     if let Some(para) = s.doc.para_at(p)
         && p.off > 0
     {

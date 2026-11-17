@@ -1,11 +1,14 @@
 # Typing parity with Word
 
-Status: 2026-11-17. Added optional Helix modal input; the default Word keyboard path and parity estimates are unchanged.
+Status: 2026-11-17. Helix mode switches retain paste-key tracking; copy and paste use the system clipboard without registers.
 
 ## Optional Helix keyboard path
 
 - ui.helix enables the modal canvas path. ui.helixMode queries or changes Normal, Insert or Select mode.
 - Normal and Select route committed text through modal bindings and ignore IME preedit/deletion requests. Insert forwards text and IME through the existing typing handlers.
+- Press tracking precedes modal dispatch. A plain v after a modifier shortcut switches Normal/Select without pasting on release; native paste releases without a press retain their fallback.
+- y and delete/change copies publish through the existing clipboard commands. p/P/R read the current system clipboard, including external changes. No Helix register is kept.
+- Native Helix keymaps override modal canvas bindings before default handlers. Printable remaps follow committed text, preserving Caps Lock and keyboard layout behavior. Special keys and modifier chords use Helix notation. Insert-mode prefixes wait for their continuation, replay mismatches as typing, and retain the existing undo grouping. IME composition in Insert mode remains ordinary text input.
 - Character selections use the document's grapheme and complex-script caret stops. Select-mode extension retains an inclusive anchor when reversing direction.
 - Insert sessions group typing, deletion and paragraph insertion until Escape. Change and Open include their initial deletion or paragraph insertion in that checkpoint.
 - The dot binding replays recorded mutating insert commands, with bounded recording. Navigation inside an insertion is not recorded.
@@ -15,6 +18,8 @@ Status: 2026-11-17. Added optional Helix modal input; the default Word keyboard 
 ## Helix revision history
 
 - 2026-11-17: Added optional modal input and selection regressions alongside the existing Word typing path.
+- 2026-11-17: Added configuration-driven keys, nested Insert sequences, movement arrays and clipboard regression coverage.
+- 2026-11-17: Added v-release regressions and clipboard-only default bindings, including remaps and disabled-provider command arrays.
 
 ## Word typing assessment
 

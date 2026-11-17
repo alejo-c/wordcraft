@@ -1,10 +1,12 @@
 use egui::{Event, Key, Modifiers};
 use serde_json::{Value, json};
-use wordcraft_doc::edit::Fragment;
 
 use crate::WordApp;
 
-#[derive(Clone, Copy, Default, PartialEq, Eq)]
+mod bindings;
+pub(crate) mod config;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum Mode {
     #[default]
     Normal,
@@ -25,6 +27,7 @@ impl Mode {
 #[derive(Clone, Copy)]
 enum Pending {
     Goto,
+    View,
     Space,
     Find { backward: bool, till: bool },
     Replace,
@@ -58,7 +61,6 @@ pub(crate) struct State {
     count: usize,
     pending: Option<Pending>,
     drop_text: bool,
-    register: Option<Fragment>,
     document: Option<u64>,
     last_find: Option<(String, bool, bool)>,
     insert_start: usize,
@@ -66,6 +68,11 @@ pub(crate) struct State {
     insert_seen: u64,
     insertion: Insertion,
     last_insert: Option<Insertion>,
+    custom_prefix: Vec<String>,
+}
+
+pub(crate) fn block_caret(app: &WordApp) -> bool {
+    app.ui.helix_editing && app.canvas.helix.mode != Mode::Insert
 }
 
 pub(crate) fn status(app: &WordApp) -> String {
@@ -77,6 +84,7 @@ pub(crate) fn status(app: &WordApp) -> String {
     };
     let prefix = match state.pending {
         Some(Pending::Goto) => " g",
+        Some(Pending::View) => " z",
         Some(Pending::Space) => " Space",
         Some(Pending::Find { backward: false, till: false }) => " f",
         Some(Pending::Find { backward: true, till: false }) => " F",
@@ -89,6 +97,7 @@ pub(crate) fn status(app: &WordApp) -> String {
         None => "",
     };
     let count = if state.count == 0 { String::new() } else { state.count.to_string() };
+    let prefix = if state.custom_prefix.is_empty() { prefix.to_string() } else { format!(" {}", state.custom_prefix.join(" ")) };
     let keys = format!("{prefix} {count}").trim_end().to_string();
     crate::i18n::fmt(tl!("Helix {mode}{keys}"), &[("mode", mode), ("keys", &keys)])
 }
@@ -97,6 +106,9 @@ pub(crate) fn command(app: &mut WordApp, id: &str, p: &Value) -> Result<Value, S
     if id == "ui.helix" {
         if let Some(value) = p.get("value") {
             let enabled = value.as_bool().ok_or("value must be true or false")?;
+            if enabled {
+                config::ensure_loaded(app);
+            }
             if enabled != app.ui.helix_editing {
                 app.ui.helix_editing = enabled;
                 app.canvas.helix = State::default();
@@ -123,7 +135,8 @@ pub(crate) fn command(app: &mut WordApp, id: &str, p: &Value) -> Result<Value, S
         };
         set_mode(app, mode)?;
     }
-    Ok(json!({"enabled": app.ui.helix_editing, "mode": app.canvas.helix.mode.name()}))
+    Ok(json!({"enabled": app.ui.helix_editing, "mode": app.canvas.helix.mode.name(),
+        "config": app.helix_config.as_ref().map(config::Config::describe)}))
 }
 
 fn interrupt_ime(app: &mut WordApp) {
@@ -156,6 +169,7 @@ fn set_mode(app: &mut WordApp, mode: Mode) -> Result<(), String> {
     }
     app.canvas.helix.mode = mode;
     app.canvas.helix.pending = None;
+    app.canvas.helix.custom_prefix.clear();
     app.canvas.helix.count = 0;
     Ok(())
 }
@@ -239,7 +253,7 @@ fn open_line(app: &mut WordApp, above: bool) -> Result<(), String> {
 
 fn delete(app: &mut WordApp, change: bool, copy: bool) -> Result<(), String> {
     if copy {
-        yank(app)?;
+        bindings::clipboard_copy(app)?;
     }
     let start = app.session.undo_depth();
     if !app.session.sel.is_collapsed() {
@@ -276,35 +290,17 @@ fn repeat_insert(app: &mut WordApp) -> Result<(), String> {
     set_mode(app, Mode::Normal)
 }
 
-fn yank(app: &mut WordApp) -> Result<(), String> {
-    if !app.session.sel.is_collapsed() {
-        let (start, end) = app.session.sel.ordered();
-        app.canvas.helix.register = Some(app.session.doc.copy_range(&start, &end));
-    }
-    Ok(())
-}
-
-fn paste(app: &mut WordApp, before: bool, replace: bool) -> Result<(), String> {
-    let Some(fragment) = app.canvas.helix.register.clone() else { return Ok(()) };
-    if !replace {
-        insert(app, !before, false)?;
-    }
-    let (start, _) = app.session.sel.ordered();
-    let saved_clip = app.session.clipboard.replace(fragment.clone());
-    let saved_text = std::mem::replace(&mut app.session.clipboard_text, fragment.clipboard_text());
-    let result = app.run("edit.paste", json!({"privateClipboard": true, "text": app.session.clipboard_text}));
-    app.session.clipboard = saved_clip;
-    app.session.clipboard_text = saved_text;
-    result?;
-    app.canvas.helix.mode = Mode::Normal;
-    let end = app.session.sel.focus.clone();
-    app.run("select.range", json!({"anchor": start, "focus": end}))?;
-    Ok(())
-}
-
 fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
     if let Some(pending) = app.canvas.helix.pending.take() {
         match pending {
+            Pending::View => {
+                app.canvas.helix_align = match text {
+                    "t" => Some(egui::Align::Min),
+                    "z" | "c" | "m" => Some(egui::Align::Center),
+                    "b" => Some(egui::Align::Max),
+                    _ => None,
+                };
+            }
             Pending::Goto => match text {
                 "g" if app.canvas.helix.count != 0 => motion(app, "line")?,
                 "g" => motion(app, "docStart")?,
@@ -321,13 +317,10 @@ fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
                     app.run("ui.dialog", json!({"name": "commands"}))?;
                 }
                 "y" | "Y" => {
-                    app.run("edit.copy", json!({}))?;
+                    bindings::clipboard_copy(app)?;
                 }
                 "p" | "P" => {
-                    insert(app, text == "p", false)?;
-                    app.run("edit.paste", json!({}))?;
-                    app.canvas.helix.mode = Mode::Normal;
-                    app.run("select.helixCursor", json!({"previous": true}))?;
+                    bindings::clipboard_paste(app, text == "P", false, false)?;
                 }
                 _ => {}
             },
@@ -382,6 +375,7 @@ fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
         "o" | "O" => open_line(app, text == "O")?,
         "v" => set_mode(app, if app.canvas.helix.mode == Mode::Select { Mode::Normal } else { Mode::Select })?,
         "g" => app.canvas.helix.pending = Some(Pending::Goto),
+        "z" => app.canvas.helix.pending = Some(Pending::View),
         "m" => app.canvas.helix.pending = Some(Pending::Match),
         " " => app.canvas.helix.pending = Some(Pending::Space),
         "f" | "F" | "t" | "T" => {
@@ -413,10 +407,10 @@ fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
                 app.run(if text == "u" { "edit.undo" } else { "edit.redo" }, json!({}))?;
             }
         }
-        "y" => yank(app)?,
+        "y" => bindings::clipboard_copy(app)?,
         "d" | "c" => delete(app, text == "c", true)?,
         "." => repeat_insert(app)?,
-        "p" | "P" | "R" => paste(app, text == "P", text == "R")?,
+        "p" | "P" | "R" => bindings::clipboard_paste(app, text == "P", text == "R", true)?,
         "/" => {
             app.run("edit.find", json!({}))?;
         }
@@ -452,12 +446,28 @@ fn key_text(key: Key, shift: bool) -> Option<String> {
 }
 
 fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<bool, String> {
+    let printable = !m.ctrl && !m.alt && !m.mac_cmd && !m.command && config::printable_key(key, m.shift).is_some();
+    if !(printable && text_follows)
+        && let Some(name) = config::event_key(key, m)
+        && bindings::custom(app, &name)?
+    {
+        app.canvas.helix.drop_text = text_follows && config::printable_key(key, m.shift).is_some();
+        return Ok(true);
+    }
     if key == Key::Escape {
+        if matches!(app.canvas.helix.pending, Some(Pending::View)) {
+            app.canvas.helix.pending = None;
+            app.canvas.helix.count = 0;
+            return Ok(true);
+        }
         set_mode(app, Mode::Normal)?;
         return Ok(true);
     }
     if m.mac_cmd || (m.command && !m.ctrl) {
         return Ok(false);
+    }
+    if matches!(app.canvas.helix.pending, Some(Pending::View)) && !printable {
+        return character(app, "").map(|()| true);
     }
     if m.ctrl && !m.alt && !m.shift {
         let id = if app.canvas.helix.mode == Mode::Insert {
@@ -535,10 +545,10 @@ pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> boo
     if !app.ui.helix_editing {
         return false;
     }
+    config::ensure_loaded(app);
     let document = app.session.document_id();
     if app.canvas.helix.document != Some(document) {
-        let register = app.canvas.helix.register.take();
-        app.canvas.helix = State { document: Some(document), register, ..Default::default() };
+        app.canvas.helix = State { document: Some(document), ..Default::default() };
     }
     if app.canvas.helix.insert_group.is_some_and(|group| group != (app.session.rev(), app.session.undo_depth())) {
         app.canvas.helix.insert_group = None;
@@ -546,22 +556,25 @@ pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> boo
         app.canvas.helix.insert_seen = app.session.rev();
     }
     let before = (app.session.rev(), app.session.sel.clone(), app.canvas.helix.mode);
-    let result = match event {
+    let result = (|| match event {
         Event::Key { key: k, pressed: true, modifiers, physical_key, .. } => {
             app.canvas.helix.drop_text = false;
             key(app, *k, *modifiers, text_follows || physical_key.is_some())
         }
         Event::Text(text) => {
             if std::mem::take(&mut app.canvas.helix.drop_text) {
-                return true;
+                return Ok(true);
+            }
+            if bindings::text(app, text)? {
+                return Ok(true);
             }
             if app.canvas.helix.mode == Mode::Insert {
                 join_insert(app);
-                return false;
+                return Ok(false);
             }
             character(app, text).map(|()| true)
         }
-        Event::Ime(egui::ImeEvent::Commit(text)) if app.canvas.helix.mode != Mode::Insert => character(app, text).map(|()| true),
+        Event::Ime(egui::ImeEvent::Commit(text)) if app.canvas.helix.mode != Mode::Insert => bindings::committed(app, text),
         Event::Ime(_) if app.canvas.helix.mode != Mode::Insert => Ok(true),
         Event::Ime(egui::ImeEvent::Commit(_) | egui::ImeEvent::DeleteSurrounding { .. } | egui::ImeEvent::DeleteSurroundingBytes { .. })
         | Event::Paste(_)
@@ -571,19 +584,22 @@ pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> boo
             Ok(false)
         }
         Event::WindowFocused(false) => {
+            bindings::flush_prefix(app)?;
             app.canvas.helix.pending = None;
             app.canvas.helix.count = 0;
             app.canvas.helix.drop_text = false;
             Ok(false)
         }
         Event::PointerButton { pressed: true, .. } => {
+            bindings::flush_prefix(app)?;
             app.canvas.helix.pending = None;
             app.canvas.helix.count = 0;
+            app.canvas.helix.custom_prefix.clear();
             app.canvas.helix.drop_text = false;
             Ok(false)
         }
         _ => Ok(false),
-    };
+    })();
     match result {
         Ok(handled) => handled,
         Err(error) => {
@@ -593,6 +609,7 @@ pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> boo
             }
             app.canvas.helix.pending = None;
             app.canvas.helix.count = 0;
+            app.canvas.helix.custom_prefix.clear();
             app.status(error);
             true
         }

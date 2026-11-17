@@ -1,6 +1,6 @@
 # WordCraft roadmap
 
-Status: 2026-11-17. Added optional Helix modal editing; native and browser acceptance remains pending. Word parity estimates unchanged.
+Status: 2026-11-17. Added Helix view alignment, modal caret rendering and line feedback; interactive acceptance remains pending.
 
 Spotlight status, 2026-11-13: native paragraph-style margin blocks and matching Styles pane indicators; see docs/spotlight.md.
 
@@ -156,6 +156,8 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 ## Progress log
 
 - 2026-11-17: Helix modal editing adds movement, selection-first edits, rich-text yanking, insertion repeat and persistent preferences.
+- 2026-11-17: Helix loads XDG keymaps, movement arrays and clipboard settings without new crates or subprocesses.
+- 2026-11-17: Helix tracks mode-switch key presses before paste handling and uses the system clipboard without private registers.
 - 2026-11-13: Added native paragraph style spotlight blocks and matching Styles pane indicators with persistent visibility.
 
  fix/6146-touchpad-scroll-speed
@@ -901,7 +903,10 @@ MATH glyphs that reference the same construction now share its immutable variant
 
 ## Revision history
 
-- 2026-11-17: Merged Helix modal editing into custom alongside Spotlight. Readiness estimates unchanged.
+- 2026-11-17: Merged the initial Helix modal editing implementation into custom alongside Spotlight. Readiness estimates unchanged.
+- 2026-11-17: Added native Helix configuration and custom binding support; Word readiness estimates unchanged.
+- 2026-11-17: Fixed modal v-release paste routing and removed Helix registers in favor of the system clipboard.
+- 2026-11-17: Added Helix vertical view alignment, block caret rendering, relative line numbers and optional current-line shading.
 - 2026-11-13: Spotlight native UI integration. Readiness estimates unchanged.
 
 > 2026-11-08 · Progress log: `convert --strict` refuses a PDF or PNG that would silently lack a character or a picture (#6005).
