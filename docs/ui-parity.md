@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-Status: 2026-11-17. Helix editing reads native XDG configuration; native and browser acceptance remains pending. Word parity estimates unchanged.
+Status: 2026-11-17. Helix mode switching preserves paste-key tracking and uses clipboard-only copy/paste. Interactive acceptance remains pending.
 
 ## Helix modal editing
 
@@ -8,7 +8,7 @@ Status: 2026-11-17. Helix editing reads native XDG configuration; native and bro
 - Native builds read XDG_CONFIG_HOME/helix/config.toml when Helix is first enabled, including a saved enabled preference. With an unset, empty or relative XDG_CONFIG_HOME, HOME/.config/helix/config.toml is used. The file is never changed. Restart to reload, or bind a key to :config-reload.
 - keys.normal, keys.insert and keys.select override supported bindings independently. Commands, command arrays, inline maps and nested tables are supported, including Insert-mode j = { k = "normal_mode" }. Unmatched Insert prefixes are replayed as typing. Existing default g and Space sequences remain available outside custom entries.
 - Supported custom actions include character, visual-line, word, long-word, line-boundary, document and page movements; selection extension; modes; insertion, deletion, case, undo, redo, search, scroll and clipboard actions. :w and :q use the normal save and close flows. no_op disables a key.
-- Clipboard-provider none disables Helix system-clipboard actions while leaving the private yank register available. Native provider names use WordCraft's existing clipboard services and retain rich text where available. Custom command providers, terminal-only providers and unknown providers report unsupported; no process is launched.
+- Clipboard-provider none disables Helix copy/paste actions, including default y/d/c/p/P/R and their configured aliases. Native provider names use WordCraft's existing clipboard services and retain rich text where available. Custom command providers, terminal-only providers and unknown providers report unsupported; no process is launched.
 - Shell commands, macros, syntax-node commands, window commands and other unsupported action names report a status message when invoked. Command arrays are checked for unsupported names and unavailable clipboard providers before any action executes. Unrelated editor settings are ignored.
 - Missing files retain the defaults. Invalid, non-UTF-8, non-regular or oversized configuration files retain defaults and report an error. Parsing and keymap nesting, entries and command arrays are bounded. Browser builds do not read the host filesystem.
 - The status bar shows Normal, Insert or Select and any pending count or key sequence. Clicking it returns to Normal.
@@ -17,7 +17,7 @@ Status: 2026-11-17. Helix editing reads native XDG configuration; native and bro
 - gg/ge go to document boundaries; gh/gl/gs go to line boundaries or the first nonblank character; a count before gg or G selects a paragraph by number.
 - f/F/t/T wait for a character and search across paragraphs. Alt+. repeats the last character motion.
 - i/a/I/A insert before, after, at line start or at line end. o/O open a paragraph below or above. c changes the selection; d deletes it.
-- y/p/P/R use a separate rich-text yank register. Space y copies to the system clipboard; Space p/P pastes it. Alt+d and Alt+c omit yanking.
+- y copies to the system clipboard; d/c copy there before deleting/changing. p/P/R paste its current content after/before/over the selection. Space y and Space p/P use that same clipboard. Alt+d and Alt+c omit copying. No Helix registers are kept.
 - u/U undo and redo. Insert-mode changes share an undo checkpoint until Escape; . repeats the last recorded insertion.
 - x extends through paragraphs; X selects paragraph bounds. Semicolon collapses to the cursor; Alt+semicolon reverses the selection; percent selects the story.
 - miw/maw, mis/mas and mip/map select inner/around word, sentence or paragraph objects. Greater/less-than indent or outdent; tilde toggles case; grave accent lowercases.
@@ -30,11 +30,15 @@ Status: 2026-11-17. Helix editing reads native XDG configuration; native and bro
 - Verification on 2026-11-17: 75 keyboard tests, Helix engine/typing regressions, native checks, Clippy, WASM, interface audit, assets and layering passed; headless previews were inspected.
 - Full cargo xtask ci stops at 26 existing engine failures in layout, proofing and ODT. The same failures reproduce on main at 69ea4477.
 - Configuration validation: 92 keyboard/configuration tests, native checking, Clippy, the full WASM check, assets and layering passed. A headless preview loaded the actual user configuration without errors and exercised its movement binding. Full CI still stops at the documented 26 engine failures; interactive acceptance remains pending.
+- Clipboard regression validation: 96 keyboard/configuration tests passed, including stale-modifier v releases and clipboard-only defaults and aliases.
+- Clipboard change validation: native checking, WASM, assets and layering passed; a headless Select preview was inspected. The unrestricted UI library run passed 1276 tests, failed RTL template-title alignment and missing-glyph checks, and ignored 3 tests.
+- The unrestricted full quality gate passed formatting and Clippy, then stopped at the documented 26 engine failures in layout, proofing and ODT.
 
 ## Helix revision history
 
 - 2026-11-17: Added optional Helix modes, movement, selection-first edits, saved preferences and mode status.
 - 2026-11-17: Added XDG configuration loading, custom modal keymaps and native clipboard configuration without new crates or subprocesses.
+- 2026-11-17: Fixed stale paste modifiers on modal v releases and replaced the private Helix register with system clipboard commands.
 
 ## Word UI assessment
 

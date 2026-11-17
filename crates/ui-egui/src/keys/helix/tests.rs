@@ -202,6 +202,53 @@ fn normal_insert_select_and_escape_do_not_type_command_keys() {
 }
 
 #[test]
+fn select_mode_v_release_does_not_reuse_paste_modifiers() {
+    for physical_key in [None, Some(Key::V)] {
+        for split in [false, true].into_iter().filter(|split| !split || physical_key.is_some()) {
+            for alt in [false, true] {
+                let mut a = app("abcd");
+                a.services.clipboard_text = Some(Box::new(|| Some("clipboard".into())));
+                a.services.clipboard_picture = Some(Box::new(|| None));
+                let revision = a.session.rev();
+                for mode in [Mode::Select, Mode::Normal] {
+                    let modifiers = Modifiers { ctrl: true, command: true, alt, ..Default::default() };
+                    frame(&mut a, vec![Event::ModifiersChanged(modifiers), Event::ModifiersChanged(Modifiers::NONE)]);
+                    let key = Event::Key { key: Key::V, physical_key, pressed: true, repeat: false, modifiers: Modifiers::NONE };
+                    if split {
+                        frame(&mut a, vec![key]);
+                        frame(&mut a, vec![Event::Text("v".into())]);
+                    } else {
+                        frame(&mut a, vec![key, Event::Text("v".into())]);
+                    }
+                    frame(&mut a, vec![Event::Key { key: Key::V, physical_key, pressed: false, repeat: false, modifiers: Modifiers::NONE }]);
+                    assert_eq!(a.canvas.helix.mode, mode);
+                    assert_eq!(body(&a), "abcd");
+                    assert_eq!(a.session.selected_text(), "a");
+                    assert_eq!(a.session.rev(), revision);
+                    assert!(a.dialog.is_none());
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn modal_mode_keeps_native_paste_release_without_a_press() {
+    let mut a = app("abcd");
+    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+    a.services.clipboard_picture = Some(Box::new(|| None));
+    frame(
+        &mut a,
+        vec![
+            Event::ModifiersChanged(Modifiers { ctrl: true, command: true, ..Default::default() }),
+            Event::ModifiersChanged(Modifiers::NONE),
+            Event::Key { key: Key::V, physical_key: Some(Key::V), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+        ],
+    );
+    assert_eq!(body(&a), "XYZbcd");
+}
+
+#[test]
 fn counted_goto_and_character_find_sequences_work_across_frames() {
     let mut a = app("abcd\nefgh");
     text(&mut a, "2");
@@ -218,10 +265,26 @@ fn counted_goto_and_character_find_sequences_work_across_frames() {
 }
 
 #[test]
-fn delete_yanks_and_paste_keeps_the_internal_register() {
+fn delete_yanks_and_paste_reads_the_latest_system_clipboard() {
+    use std::{cell::RefCell, rc::Rc};
+
     let mut a = app("abcd");
+    a.ctx = Some(egui::Context::default());
+    let clipboard = Rc::new(RefCell::new(String::new()));
+    let source = clipboard.clone();
+    a.services.clipboard_text = Some(Box::new(move || Some(source.borrow().clone())));
+    let sink = clipboard.clone();
+    a.services.set_clipboard_rich = Some(Box::new(move |text, _, _, _| {
+        *sink.borrow_mut() = text.to_string();
+        true
+    }));
+    text(&mut a, "y");
+    assert_eq!(body(&a), "abcd");
+    assert_eq!(*clipboard.borrow(), "a");
+    *clipboard.borrow_mut() = "external".into();
     text(&mut a, "d");
     assert_eq!(body(&a), "bcd");
+    assert_eq!(*clipboard.borrow(), "a");
     text(&mut a, "p");
     assert_eq!(body(&a), "bacd");
     text(&mut a, "u");
@@ -230,6 +293,35 @@ fn delete_yanks_and_paste_keeps_the_internal_register() {
     assert_eq!(body(&a), "abcd");
     text(&mut a, "U");
     assert_eq!(body(&a), "bcd");
+    *clipboard.borrow_mut() = "XYZ".into();
+    text(&mut a, "p");
+    assert_eq!(body(&a), "bXYZcd");
+    assert_eq!(a.session.selected_text(), "XYZ");
+}
+
+#[test]
+fn default_and_remapped_pastes_use_system_clipboard_without_a_prior_yank() {
+    for (key, command, expected) in [("p", "paste_after", "aXYZbc"), ("P", "paste_before", "XYZabc"), ("R", "replace_with_yanked", "XYZbc")] {
+        for custom in [false, true] {
+            let mut a = if custom { configured("abc", &format!("[keys.normal]\nz = '{command}'")) } else { app("abc") };
+            a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+            text(&mut a, if custom { "z" } else { key });
+            assert_eq!(body(&a), expected);
+            assert_eq!(a.session.selected_text(), "XYZ");
+            assert_eq!(a.canvas.helix.mode, Mode::Normal);
+        }
+    }
+}
+
+#[test]
+fn disabled_clipboard_prevents_partial_default_clipboard_command_arrays() {
+    for command in ["yank", "delete_selection", "change_selection", "paste_after", "paste_before", "replace_with_yanked"] {
+        let mut a = configured("ABC", &format!("[editor]\nclipboard-provider = 'none'\n[keys.normal]\nz = ['switch_case', '{command}']"));
+        text(&mut a, "z");
+        assert_eq!(body(&a), "ABC");
+        assert_eq!(a.canvas.helix.mode, Mode::Normal);
+        assert!(a.status_msg.as_ref().is_some_and(|(m, _)| m.contains("disabled")));
+    }
 }
 
 #[test]

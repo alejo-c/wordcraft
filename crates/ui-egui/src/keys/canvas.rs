@@ -67,11 +67,11 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
                 .iter()
                 .take_while(|e| !matches!(e, egui::Event::Key { pressed: true, .. }))
                 .any(|e| matches!(e, egui::Event::Text(_)));
+        note_key_state(app, &e);
         if super::helix::event(app, &e, text_follows) {
             super::helix::after_event(app);
             continue;
         }
-        note_key_state(app, &e);
         if drop_refused_replacement(app, &e, &mut batch)
             || prefilter(app, ctx, &e, alt_codes)
             || paste_release(app, &e)

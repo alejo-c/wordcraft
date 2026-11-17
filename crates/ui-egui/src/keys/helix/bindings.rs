@@ -1,5 +1,5 @@
 use super::config::{Binding, Clipboard};
-use super::{Mode, Pending, WordApp, character, delete, insert, json, open_line, paste, repeat_insert, set_mode, take_count, yank};
+use super::{Mode, Pending, WordApp, character, delete, insert, json, open_line, repeat_insert, set_mode, take_count};
 
 enum Action {
     Motion(&'static str, bool),
@@ -155,7 +155,7 @@ fn execute(app: &mut WordApp, commands: Vec<String>) -> Result<(), String> {
         .map(|name| resolve(name).ok_or_else(|| format!("Unsupported Helix command: {}", name.split_whitespace().next().unwrap_or("(empty)"))));
     let actions = actions.collect::<Result<Vec<_>, _>>()?;
     // Validate the entire sequence before any edit, so a later unsupported action cannot leave a partial edit.
-    if actions.iter().any(|a| matches!(a, Action::ClipboardCopy | Action::ClipboardPaste(..))) {
+    if actions.iter().any(|a| matches!(a, Action::ClipboardCopy | Action::ClipboardPaste(..) | Action::Default("y" | "d" | "c" | "p" | "P" | "R"))) {
         clipboard_ready(app)?;
     }
     let count = take_count(app);
@@ -207,10 +207,10 @@ fn run(app: &mut WordApp, action: Action) -> Result<(), String> {
             "O" => open_line(app, true)?,
             "d" => delete(app, false, true)?,
             "c" => delete(app, true, true)?,
-            "y" => yank(app)?,
-            "p" => paste(app, false, false)?,
-            "P" => paste(app, true, false)?,
-            "R" => paste(app, false, true)?,
+            "y" => clipboard_copy(app)?,
+            "p" => clipboard_paste(app, false, false, true)?,
+            "P" => clipboard_paste(app, true, false, true)?,
+            "R" => clipboard_paste(app, false, true, true)?,
             "." => repeat_insert(app)?,
             _ => character(app, text)?,
         },

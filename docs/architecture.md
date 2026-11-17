@@ -1,22 +1,22 @@
 # WordCraft architecture
 
-Status: 2026-11-17. Helix modal editing includes native XDG configuration and a bounded custom binding adapter.
+Status: 2026-11-17. Helix editing uses the system clipboard and records paste-key state before modal dispatch.
 
 ## Helix symbols
 
 - crates/engine/src/cmd/helix.rs:9: specs registers modal movement, character selection, line selection, find, flip, text objects and replacement.
 - Uses: Session, Selection, cmd::caret movement and page geometry, document cluster boundaries, existing selection and text-edit primitives.
 - Used by: cmd::registry, the modal canvas adapter, CLI and MCP command dispatch, modal engine tests.
-- crates/ui-egui/src/keys/helix.rs:59: State holds per-window mode, pending sequences, counts, rich-text yank storage and bounded insertion recordings.
+- crates/ui-egui/src/keys/helix.rs:58: State holds per-window mode, pending sequences, counts and bounded insertion recordings without a yank register.
 - Uses: CanvasState, UiState::helix_editing, WordApp::run, existing engine edit and movement commands.
 - Used by: canvas_events, UI mode commands, Options and the status bar; modal keyboard and focus regressions.
-- crates/ui-egui/src/keys/helix.rs:549: event consumes modal keys and text before the ordinary canvas handlers; after_event at line 211 records accepted insert mutations.
+- crates/ui-egui/src/keys/helix.rs:521: event consumes modal keys and text before the ordinary canvas handlers; after_event at line 209 records accepted insert mutations.
 - Uses: State, engine revision and undo depth, existing IME interruption and undo-join APIs.
 - Used by: keys::canvas::canvas_events.
 - crates/engine/src/cmd/caret.rs:155: left, right and page_step are shared within cmd for existing Word navigation and the Helix adapter.
 - Uses: document caret boundaries, paragraph navigation and section page geometry.
 - Used by: cmd::caret and cmd::helix.
-- crates/ui-egui/src/keys/helix.rs:101: command implements ui.helix and ui.helixMode; status at line 75 formats the active mode and pending keys.
+- crates/ui-egui/src/keys/helix.rs:99: command implements ui.helix and ui.helixMode; status at line 73 formats the active mode and pending keys.
 - Uses: UiState persistence, CanvasState::helix, existing caret commands.
 - Used by: WordApp::ui_command, Options > Advanced > Customize, chrome::status_bar.
 - UiState::helix_editing is an application preference; CanvasState::helix travels with the existing per-window canvas state. Document switches reset mode and pending input.
@@ -26,12 +26,17 @@ Status: 2026-11-17. Helix modal editing includes native XDG configuration and a 
 - crates/ui-egui/src/keys/helix/bindings.rs:287: custom dispatches nested user bindings; execute validates command arrays; clipboard_copy and clipboard_paste enforce the configured clipboard policy.
 - Uses: Config::binding, existing Helix editing helpers, WordApp::run, native clipboard services and the single-selection model.
 - Used by: modal key and committed-text handlers, built-in system-clipboard bindings and keyboard regression tests.
+- Default y, d, c, p, P and R use clipboard_copy and clipboard_paste, including configured aliases. execute checks their clipboard policy before running command arrays. The private Helix register and its yank/paste helpers are removed.
+- crates/ui-egui/src/keys/canvas.rs:171: note_key_state records key presses and paste modifiers before Helix consumes events, preventing a modal v release from inheriting stale paste modifiers.
+- Uses: CanvasState::v_pressed, CanvasState::paste_mods, shortcuts::is_modifier_key.
+- Used by: canvas_events and native paste-release fallback.
 - Native clipboard provider names choose WordCraft's existing clipboard integration rather than executing the provider's Helix helper programs. Browser builds retain default keymaps without reading environment variables or local files.
 
 ## Helix revision history
 
 - 2026-11-17: Added command and keyboard-adapter symbol references for optional Helix modal editing.
 - 2026-11-17: Added XDG configuration and custom binding modules; reused the existing TOML parser and bounded file reader.
+- 2026-11-17: Removed Helix register storage and reused system clipboard helpers; moved paste-key tracking before modal dispatch.
 
 ## Architecture overview
 

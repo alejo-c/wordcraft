@@ -1,6 +1,5 @@
 use egui::{Event, Key, Modifiers};
 use serde_json::{Value, json};
-use wordcraft_doc::edit::Fragment;
 
 use crate::WordApp;
 
@@ -61,7 +60,6 @@ pub(crate) struct State {
     count: usize,
     pending: Option<Pending>,
     drop_text: bool,
-    register: Option<Fragment>,
     document: Option<u64>,
     last_find: Option<(String, bool, bool)>,
     insert_start: usize,
@@ -249,7 +247,7 @@ fn open_line(app: &mut WordApp, above: bool) -> Result<(), String> {
 
 fn delete(app: &mut WordApp, change: bool, copy: bool) -> Result<(), String> {
     if copy {
-        yank(app)?;
+        bindings::clipboard_copy(app)?;
     }
     let start = app.session.undo_depth();
     if !app.session.sel.is_collapsed() {
@@ -284,32 +282,6 @@ fn repeat_insert(app: &mut WordApp) -> Result<(), String> {
         after_event(app);
     }
     set_mode(app, Mode::Normal)
-}
-
-fn yank(app: &mut WordApp) -> Result<(), String> {
-    if !app.session.sel.is_collapsed() {
-        let (start, end) = app.session.sel.ordered();
-        app.canvas.helix.register = Some(app.session.doc.copy_range(&start, &end));
-    }
-    Ok(())
-}
-
-fn paste(app: &mut WordApp, before: bool, replace: bool) -> Result<(), String> {
-    let Some(fragment) = app.canvas.helix.register.clone() else { return Ok(()) };
-    if !replace {
-        insert(app, !before, false)?;
-    }
-    let (start, _) = app.session.sel.ordered();
-    let saved_clip = app.session.clipboard.replace(fragment.clone());
-    let saved_text = std::mem::replace(&mut app.session.clipboard_text, fragment.clipboard_text());
-    let result = app.run("edit.paste", json!({"privateClipboard": true, "text": app.session.clipboard_text}));
-    app.session.clipboard = saved_clip;
-    app.session.clipboard_text = saved_text;
-    result?;
-    app.canvas.helix.mode = Mode::Normal;
-    let end = app.session.sel.focus.clone();
-    app.run("select.range", json!({"anchor": start, "focus": end}))?;
-    Ok(())
 }
 
 fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
@@ -420,10 +392,10 @@ fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
                 app.run(if text == "u" { "edit.undo" } else { "edit.redo" }, json!({}))?;
             }
         }
-        "y" => yank(app)?,
+        "y" => bindings::clipboard_copy(app)?,
         "d" | "c" => delete(app, text == "c", true)?,
         "." => repeat_insert(app)?,
-        "p" | "P" | "R" => paste(app, text == "P", text == "R")?,
+        "p" | "P" | "R" => bindings::clipboard_paste(app, text == "P", text == "R", true)?,
         "/" => {
             app.run("edit.find", json!({}))?;
         }
@@ -553,8 +525,7 @@ pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> boo
     config::ensure_loaded(app);
     let document = app.session.document_id();
     if app.canvas.helix.document != Some(document) {
-        let register = app.canvas.helix.register.take();
-        app.canvas.helix = State { document: Some(document), register, ..Default::default() };
+        app.canvas.helix = State { document: Some(document), ..Default::default() };
     }
     if app.canvas.helix.insert_group.is_some_and(|group| group != (app.session.rev(), app.session.undo_depth())) {
         app.canvas.helix.insert_group = None;

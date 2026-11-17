@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-Status: 2026-11-17. Optional Helix editing includes native user keymaps and clipboard configuration. Word parity estimates are unchanged.
+Status: 2026-11-17. Helix mode switching tracks paste presses and uses the system clipboard without registers. Interactive acceptance remains pending.
 
 ## Helix editing extension
 
@@ -9,6 +9,7 @@ Status: 2026-11-17. Optional Helix editing includes native user keymaps and clip
 - Native and browser interaction require acceptance testing.
 - Native user keymaps load from the Helix XDG configuration. Shell integrations and custom clipboard commands remain unsupported; see docs/ui-parity.md.
 - 2026-11-17 revision: recorded the optional modal editing extension without changing ranked Word gaps.
+- 2026-11-17 revision: fixed v-release paste routing and unified Helix copy/paste with the system clipboard; verify interactively.
 
 ## Word gap assessment
 
