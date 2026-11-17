@@ -1,10 +1,16 @@
 # UI parity with Microsoft Word
 
-Status: 2026-11-17. Optional Helix modal editing added; native and browser acceptance remains pending. Word parity estimates unchanged.
+Status: 2026-11-17. Helix editing reads native XDG configuration; native and browser acceptance remains pending. Word parity estimates unchanged.
 
 ## Helix modal editing
 
 - Enable Helix modal editing in File > Options > Advanced > Customize. The preference is saved between runs.
+- Native builds read XDG_CONFIG_HOME/helix/config.toml when Helix is first enabled, including a saved enabled preference. With an unset, empty or relative XDG_CONFIG_HOME, HOME/.config/helix/config.toml is used. The file is never changed. Restart to reload, or bind a key to :config-reload.
+- keys.normal, keys.insert and keys.select override supported bindings independently. Commands, command arrays, inline maps and nested tables are supported, including Insert-mode j = { k = "normal_mode" }. Unmatched Insert prefixes are replayed as typing. Existing default g and Space sequences remain available outside custom entries.
+- Supported custom actions include character, visual-line, word, long-word, line-boundary, document and page movements; selection extension; modes; insertion, deletion, case, undo, redo, search, scroll and clipboard actions. :w and :q use the normal save and close flows. no_op disables a key.
+- Clipboard-provider none disables Helix system-clipboard actions while leaving the private yank register available. Native provider names use WordCraft's existing clipboard services and retain rich text where available. Custom command providers, terminal-only providers and unknown providers report unsupported; no process is launched.
+- Shell commands, macros, syntax-node commands, window commands and other unsupported action names report a status message when invoked. Command arrays are checked for unsupported names and unavailable clipboard providers before any action executes. Unrelated editor settings are ignored.
+- Missing files retain the defaults. Invalid, non-UTF-8, non-regular or oversized configuration files retain defaults and report an error. Parsing and keymap nesting, entries and command arrays are bounded. Browser builds do not read the host filesystem.
 - The status bar shows Normal, Insert or Select and any pending count or key sequence. Clicking it returns to Normal.
 - Normal mode starts with a selected character. Movements replace the selection; v enters Select, where movements extend it. Escape returns to Normal.
 - h/j/k/l and arrow keys move by character or visual line. w/b/e and W/B/E move by word or whitespace-delimited word. Counts precede movements.
@@ -23,10 +29,12 @@ Status: 2026-11-17. Optional Helix modal editing added; native and browser accep
 - Regression coverage: crates/engine/src/cmd/helix/tests.rs and crates/ui-egui/src/keys/helix/tests.rs. Native and browser interaction need manual verification.
 - Verification on 2026-11-17: 75 keyboard tests, Helix engine/typing regressions, native checks, Clippy, WASM, interface audit, assets and layering passed; headless previews were inspected.
 - Full cargo xtask ci stops at 26 existing engine failures in layout, proofing and ODT. The same failures reproduce on main at 69ea4477.
+- Configuration validation: 92 keyboard/configuration tests, native checking, Clippy, the full WASM check, assets and layering passed. A headless preview loaded the actual user configuration without errors and exercised its movement binding. Full CI still stops at the documented 26 engine failures; interactive acceptance remains pending.
 
 ## Helix revision history
 
 - 2026-11-17: Added optional Helix modes, movement, selection-first edits, saved preferences and mode status.
+- 2026-11-17: Added XDG configuration loading, custom modal keymaps and native clipboard configuration without new crates or subprocesses.
 
 ## Word UI assessment
 

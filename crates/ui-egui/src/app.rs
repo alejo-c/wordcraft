@@ -86,6 +86,7 @@ impl WordApp {
         } = window_ui::WindowUi::new(session.document_id());
         WordApp {
             session,
+            helix_config: None,
             ui: UiState {
                 tab,
                 backstage,

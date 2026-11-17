@@ -1,12 +1,13 @@
 # Where WordCraft falls short of Word
 
-Status: 2026-11-17. Optional Helix modal editing is available alongside the Word keyboard path. Word parity estimates are unchanged.
+Status: 2026-11-17. Optional Helix editing includes native user keymaps and clipboard configuration. Word parity estimates are unchanged.
 
 ## Helix editing extension
 
 - Normal, Insert and Select modes, movement and selection-based editing are described in docs/ui-parity.md.
 - This extension uses the existing single-selection document model. Multiple cursors and syntax-specific editing remain outside this implementation.
 - Native and browser interaction require acceptance testing.
+- Native user keymaps load from the Helix XDG configuration. Shell integrations and custom clipboard commands remain unsupported; see docs/ui-parity.md.
 - 2026-11-17 revision: recorded the optional modal editing extension without changing ranked Word gaps.
 
 ## Word gap assessment
@@ -192,6 +193,8 @@ Table rows and cells inside `mc:AlternateContent` use the same selected-branch p
 Page Setup's margin, paper-size and document-grid number boxes scroll long text inside the field instead of enlarging the dialog (#5650). Readiness estimates unchanged. Accepted long margin values also stay inside the field after focus leaves; their accepted range, units and parsing are unchanged.
 
 ## Revision history
+
+- 2026-11-17: Recorded native Helix configuration support and unsupported integrations; Word readiness estimates unchanged.
 
 > 2026-11-03 · Section `w:chapStyle` values now preserve the complete unsigned-byte range, including 10; values above 255 are rejected.
 

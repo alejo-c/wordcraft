@@ -635,6 +635,7 @@ fn migrate_units(v: &mut Value) {
 pub struct WordApp {
     pub session: Session,
     pub ui: UiState,
+    pub(crate) helix_config: Option<keys::helix::config::Config>,
     pub services: Services,
     /// Only a successfully published copy may reuse this window's private fragment.
     pub clipboard_published: bool,

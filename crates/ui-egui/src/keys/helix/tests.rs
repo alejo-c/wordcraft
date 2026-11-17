@@ -5,6 +5,7 @@ use wordcraft_engine::Session;
 
 fn app(text: &str) -> WordApp {
     let mut app = WordApp::new(Session::new(Document::from_text(text)), Services::default());
+    app.helix_config = Some(config::Config::default());
     app.session.prefs.autocorrect.enabled = false;
     app.run("caret.docStart", json!({})).unwrap();
     app.run("ui.helix", json!({"value": true})).unwrap();
@@ -27,6 +28,159 @@ fn text(app: &mut WordApp, text: &str) {
 
 fn body(app: &WordApp) -> String {
     app.session.doc.plain_text(wordcraft_doc::StoryRef::Body).trim_end_matches('\n').to_string()
+}
+
+fn configured(text: &str, config: &str) -> WordApp {
+    let mut app = app(text);
+    app.helix_config = Some(config.parse().unwrap());
+    app
+}
+
+#[test]
+fn custom_movements_arrays_counts_and_modes_override_defaults() {
+    let mut a = configured(
+        "one two three",
+        r#"
+[keys.normal]
+h = "move_char_right"
+w = ["ensure_selections_forward", "move_next_word_start", "move_char_right"]
+"-" = "goto_line_start"
+[keys.select]
+h = "extend_char_right"
+"#,
+    );
+    text(&mut a, "2h");
+    assert_eq!(a.session.selected_text(), "e");
+    text(&mut a, "-");
+    assert_eq!(a.session.selected_text(), "o");
+    text(&mut a, "w");
+    assert_eq!(a.session.selected_text(), "t");
+    text(&mut a, "vh");
+    assert_eq!(a.session.selected_text(), "tw");
+    assert_eq!(body(&a), "one two three");
+}
+
+#[test]
+fn custom_nested_maps_merge_with_default_goto_bindings() {
+    let mut a = configured("ABC DEF", "[keys.normal]\ng = { u = 'switch_to_lowercase' }");
+    text(&mut a, "gu");
+    assert_eq!(body(&a), "aBC DEF");
+    text(&mut a, "gl");
+    assert_eq!(a.session.selected_text(), "F");
+    text(&mut a, "gg");
+    assert_eq!(a.session.selected_text(), "a");
+}
+
+#[test]
+fn insert_jk_sequence_and_failed_prefix_preserve_typed_text_and_undo() {
+    let mut a = configured("abc", "[keys.insert]\nj = { k = 'normal_mode' }");
+    text(&mut a, "i");
+    text(&mut a, "j");
+    assert_eq!(body(&a), "abc");
+    text(&mut a, "x");
+    assert_eq!(body(&a), "jxabc");
+    text(&mut a, "jk");
+    assert_eq!(a.canvas.helix.mode, Mode::Normal);
+    assert_eq!(body(&a), "jxabc");
+    text(&mut a, "u");
+    assert_eq!(body(&a), "abc");
+}
+
+#[test]
+fn insert_arrow_noop_and_committed_case_and_punctuation_are_respected() {
+    let mut a = configured("abcd", "[keys.normal]\nL = 'move_char_right'\n'*' = 'move_char_right'\n[keys.insert]\nleft = 'no_op'");
+    frame(&mut a, vec![press(Key::L, Modifiers::NONE), Event::Text("L".into())]);
+    assert_eq!(a.session.selected_text(), "b");
+    frame(&mut a, vec![press(Key::Num8, Modifiers::SHIFT), Event::Text("*".into())]);
+    assert_eq!(a.session.selected_text(), "c");
+    text(&mut a, "i");
+    frame(&mut a, vec![press(Key::ArrowLeft, Modifiers::NONE)]);
+    text(&mut a, "Z");
+    assert_eq!(body(&a), "abZcd");
+}
+
+#[test]
+fn clipboard_mappings_use_host_clipboard_and_honor_none() {
+    let mut a =
+        configured("abc", "[editor]\nclipboard-provider = 'wayland'\n[keys.normal]\np = ':clipboard-paste-after'\nR = ':clipboard-paste-replace'");
+    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+    text(&mut a, "p");
+    assert_eq!(body(&a), "aXYZbc");
+    assert_eq!(a.session.selected_text(), "XYZ");
+    a.services.clipboard_text = Some(Box::new(|| Some("Q".into())));
+    text(&mut a, "R");
+    assert_eq!(body(&a), "aQbc");
+    a.helix_config = Some("[editor]\nclipboard-provider = 'none'".parse().unwrap());
+    text(&mut a, " p");
+    assert_eq!(body(&a), "aQbc");
+    assert!(a.status_msg.as_ref().is_some_and(|(m, _)| m.contains("disabled")));
+}
+
+#[test]
+fn built_in_system_paste_keeps_its_existing_cursor_selection() {
+    let mut a = app("abc");
+    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+    text(&mut a, " p");
+    assert_eq!(body(&a), "aXYZbc");
+    assert_eq!(a.session.selected_text(), "Z");
+}
+
+#[test]
+fn unsupported_sequences_and_custom_clipboard_commands_do_not_partially_edit() {
+    for config in [
+        "[keys.normal]\nd = ['delete_selection', ':sh false']",
+        "[editor.clipboard-provider.custom]\nyank = { command = 'anything' }\n[keys.normal]\nd = ['delete_selection', ':clipboard-yank']",
+    ] {
+        let mut a = configured("abc", config);
+        text(&mut a, "d");
+        assert_eq!(body(&a), "abc");
+        assert!(a.status_msg.is_some());
+    }
+}
+
+#[test]
+fn custom_scroll_bindings_preserve_selection_and_accumulate_counts() {
+    let mut a = configured("one two three", "[keys.normal]\nC-y = 'scroll_up'\nC-e = 'scroll_down'");
+    let selection = a.session.sel.clone();
+    a.canvas.scale = 1.0;
+    frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
+    let first = a.canvas.scroll_request.unwrap().y;
+    assert!(first > 0.0);
+    text(&mut a, "2");
+    frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
+    assert_eq!(a.canvas.scroll_request.unwrap().y, first * 3.0);
+    text(&mut a, "4");
+    frame(&mut a, vec![press(Key::Y, Modifiers::CTRL)]);
+    assert_eq!(a.canvas.scroll_request.unwrap().y, 0.0);
+    assert_eq!(a.session.sel, selection);
+    assert!(!a.canvas.scroll_to_caret);
+}
+
+#[test]
+fn pending_insert_prefix_flushes_on_focus_loss_and_custom_escape_collapses() {
+    let mut a = configured("abc", "[keys.insert]\nj = { k = 'normal_mode' }\n[keys.normal]\nesc = ['keep_primary_selection', 'collapse_selection']");
+    text(&mut a, "ij");
+    frame(&mut a, vec![Event::WindowFocused(false)]);
+    assert_eq!(body(&a), "jabc");
+    assert!(a.canvas.helix.custom_prefix.is_empty());
+    frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
+    text(&mut a, "vl");
+    frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
+    frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
+    assert_eq!(a.session.selected_text().chars().count(), 1);
+}
+
+#[test]
+fn modified_custom_keys_and_escape_arrays_run_before_default_handlers() {
+    let mut a =
+        configured("abc", "[keys.normal]\nC-h = 'move_char_right'\nC-H = 'move_char_right'\nesc = ['keep_primary_selection', 'collapse_selection']");
+    frame(&mut a, vec![press(Key::H, Modifiers::CTRL)]);
+    assert_eq!(a.session.selected_text(), "b");
+    frame(&mut a, vec![press(Key::H, Modifiers::CTRL | Modifiers::SHIFT)]);
+    assert_eq!(a.session.selected_text(), "c");
+    text(&mut a, "ggvl");
+    frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
+    assert_eq!(a.canvas.helix.mode, Mode::Normal);
 }
 
 #[test]
