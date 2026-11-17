@@ -322,7 +322,7 @@ fn reading_wheel_snaps_one_column_per_tick_and_respects_touchpads() {
     assert_eq!(read_wheel_turns(&[ev(egui::MouseWheelUnit::Point, -20.0)], true, &mut partial), 0);
     assert_eq!(read_wheel_turns(&[ev(egui::MouseWheelUnit::Point, -20.0)], true, &mut partial), 1);
     assert_eq!(read_wheel_turns(&[ev(egui::MouseWheelUnit::Line, -1.0)], false, &mut partial), 0);
-    let (rects, size) = place_read_pages(&[(240.0, 500.0); 10], 1.0, vec2(1100.0, 600.0));
+    let (rects, size) = place_read_pages(&[(240.0, 500.0); 10], 1.0, vec2(1100.0, 600.0), (0.0, 0.0));
     let last_left = rects.last().unwrap().left();
     assert!((size.x - 1100.0 - (last_left - GAP)).abs() < 1.0, "last column aligns against the pane");
     assert!(reading_size(vec2(1440.0, 750.0), PX_PER_PT, Some(612.0)).0 <= 612.0);
@@ -1240,7 +1240,7 @@ fn the_page_at_the_top_of_the_window() {
     // Hide White Space: the rects overlap in the hidden margins. Just past the seam the next
     // page's text shows, so that page is at the top, though the previous rect reaches further.
     let sizes = [(612.0, 792.0); 3];
-    let (full, _) = place_pages(&sizes, 0.0, 1.0, 1, vec2(800.0, 600.0));
+    let (full, _) = place_pages(&sizes, 0.0, 1.0, 1, vec2(800.0, 600.0), (0.0, 0.0));
     let (moved, bands, _) = collapse_white_space(&full, &[(72.0, 720.0); 3], 1.0, 600.0);
     let seam = moved[0].min.y + bands[0].1;
     assert!(moved[0].max.y > seam + SEAM + 2.0, "the rects overlap past the seam");
@@ -3548,7 +3548,7 @@ fn pages_flow_into_rows_when_they_fit() {
     // Mixed sizes: a landscape page among portrait ones, three per row.
     let sizes = [(612.0, 792.0), (792.0, 612.0), (612.0, 792.0), (612.0, 792.0)];
     let scale = 0.25;
-    let (rects, size) = place_pages(&sizes, 0.0, scale, 3, vec2(1000.0, 600.0));
+    let (rects, size) = place_pages(&sizes, 0.0, scale, 3, vec2(1000.0, 600.0), (0.0, 0.0));
     assert_eq!(rects.len(), 4);
     assert_eq!(rects[0].top(), rects[1].top());
     assert_eq!(rects[1].top(), rects[2].top());
@@ -3564,7 +3564,7 @@ fn pages_flow_into_rows_when_they_fit() {
     // Hostile page sizes and scales stay finite.
     let bad = [(f32::NAN, f32::INFINITY), (-1.0, 0.0), (1e30, 1e30)];
     for scale in [f32::NAN, 0.0, -1.0, 1e9] {
-        let (rects, size) = place_pages(&bad, f32::NAN, scale, 0, vec2(f32::NAN, -1.0));
+        let (rects, size) = place_pages(&bad, f32::NAN, scale, 0, vec2(f32::NAN, -1.0), (0.0, 0.0));
         assert_eq!(rects.len(), 3);
         assert!(size.x.is_finite() && size.y.is_finite());
         assert!(rects.iter().all(|r| r.min.x.is_finite() && r.max.y.is_finite()), "{rects:?}");
@@ -4279,7 +4279,7 @@ fn ruler_tab_stops_are_set_moved_and_cleared_with_the_pointer() {
 fn hiding_white_space_stacks_page_bands_and_keeps_hit_testing() {
     let scale = 1.0;
     let sizes = [(612.0, 792.0); 3];
-    let (rects, _) = place_pages(&sizes, 0.0, scale, 1, vec2(800.0, 600.0));
+    let (rects, _) = place_pages(&sizes, 0.0, scale, 1, vec2(800.0, 600.0), (0.0, 0.0));
     // Body from 72 to 720 pt on every page.
     let bodies = [(72.0, 720.0); 3];
     let (moved, bands, h) = collapse_white_space(&rects, &bodies, scale, 600.0);

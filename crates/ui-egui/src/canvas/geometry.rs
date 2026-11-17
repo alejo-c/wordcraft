@@ -136,13 +136,20 @@ pub(super) fn columns_for(avail_w: f32, slot_px: f32, pages: usize, min_cols: us
 /// Place pages (sizes in points) in rows of `cols`, left to right then top to bottom, each in a slot
 /// as wide as the widest page plus `markup` and centred in `avail_w`. Returns the screen-space rects
 /// (relative to the content's top-left) and the content size.
-pub(super) fn place_pages(sizes: &[(f32, f32)], markup: f32, scale: f32, cols: usize, avail: egui::Vec2) -> (Vec<Rect>, egui::Vec2) {
+pub(super) fn place_pages(
+    sizes: &[(f32, f32)],
+    markup: f32,
+    scale: f32,
+    cols: usize,
+    avail: egui::Vec2,
+    gutter: (f32, f32),
+) -> (Vec<Rect>, egui::Vec2) {
     let cols = cols.max(1);
     let scale = if scale.is_finite() { scale.clamp(0.01, 10.0) } else { PX_PER_PT };
     let markup = if markup.is_finite() { markup.clamp(0.0, 10_000.0) } else { 0.0 };
     let avail = vec2(if avail.x.is_finite() { avail.x.max(0.0) } else { 0.0 }, if avail.y.is_finite() { avail.y.max(0.0) } else { 0.0 });
     let maxw = sizes.iter().map(|&(w, _)| sane_dim(w, 1e5)).fold(0.0f32, f32::max).max(72.0) + markup;
-    let slot = maxw * scale;
+    let slot = maxw * scale + gutter.0 + gutter.1;
     let row_w = cols as f32 * slot + (cols as f32 - 1.0) * GAP;
     let content_w = (row_w + 2.0 * GAP).max(avail.x);
     let mut rects = Vec::with_capacity(sizes.len());
@@ -153,7 +160,7 @@ pub(super) fn place_pages(sizes: &[(f32, f32)], markup: f32, scale: f32, cols: u
         for &(w, ph) in row {
             let (w, ph) = (sane_dim(w, 1e5), sane_dim(ph, 1e6));
             // Pages narrower than the widest keep their markup area beside them.
-            let px = x + (maxw - markup - w).max(0.0) * scale / 2.0;
+            let px = x + gutter.0 + (maxw - markup - w).max(0.0) * scale / 2.0;
             rects.push(Rect::from_min_size(pos2(px, y), vec2(w * scale, ph * scale)));
             h = h.max(ph * scale);
             x += slot + GAP;
@@ -166,6 +173,8 @@ pub(super) fn place_pages(sizes: &[(f32, f32)], markup: f32, scale: f32, cols: u
 pub fn geometry(app: &WordApp, l: &DocLayout, avail: egui::Vec2) -> Geometry {
     let v = &app.session.view;
     let markup = markup_width(app);
+    let gutter = crate::spotlight::gutter(app);
+    let left = if crate::spotlight::on_left(app) { gutter } else { 0.0 };
     let maxw = l.pages.iter().map(|p| sane_dim(p.w, 1e5)).fold(0.0f32, f32::max).max(72.0) + markup;
     let maxh = l.pages.iter().map(|p| sane_dim(p.h, 20_000.0)).fold(0.0f32, f32::max).max(72.0);
     let web = v.mode != wordcraft_layout::ViewMode::Print;
@@ -173,15 +182,15 @@ pub fn geometry(app: &WordApp, l: &DocLayout, avail: egui::Vec2) -> Geometry {
     if v.read_mode {
         scale = v.read_zoom.clamp(0.75, 1.5) * PX_PER_PT;
         let sizes: Vec<(f32, f32)> = l.pages.iter().map(|p| (p.w, p.h)).collect();
-        let (rects, size) = place_read_pages(&sizes, scale, avail);
+        let (rects, size) = place_read_pages(&sizes, scale, avail, (left, crate::spotlight::continuous_gutter(app, scale) - left));
         // Reading columns show whole pages (Hide White Space doesn't apply).
         let bands = rects.iter().map(|r| (0.0, r.height())).collect();
         return Geometry { rects, size, scale, cols: sizes.len().max(1), bands };
     }
     match v.fit.as_str() {
-        "pageWidth" => scale = ((avail.x - 2.0 * GAP - 20.0) / maxw).clamp(0.1, 6.0),
-        "onePage" => scale = ((avail.y - 2.0 * GAP) / maxh).min((avail.x - 2.0 * GAP) / maxw).clamp(0.05, 6.0),
-        "multiplePages" => scale = ((avail.y - 2.0 * GAP) / maxh).min((avail.x - 3.0 * GAP) / (2.0 * maxw)).clamp(0.05, 6.0),
+        "pageWidth" => scale = ((avail.x - 2.0 * GAP - 20.0 - gutter) / maxw).clamp(0.1, 6.0),
+        "onePage" => scale = ((avail.y - 2.0 * GAP) / maxh).min((avail.x - 2.0 * GAP - gutter) / maxw).clamp(0.05, 6.0),
+        "multiplePages" => scale = ((avail.y - 2.0 * GAP) / maxh).min((avail.x - 3.0 * GAP - 2.0 * gutter) / (2.0 * maxw)).clamp(0.05, 6.0),
         _ => {}
     }
     if web {
@@ -199,23 +208,25 @@ pub fn geometry(app: &WordApp, l: &DocLayout, avail: egui::Vec2) -> Geometry {
     } else {
         (1, true)
     };
-    let cols = columns_for(avail.x, maxw * scale, l.pages.len(), min_cols, auto);
+    let cols = columns_for(avail.x, maxw * scale + gutter, l.pages.len(), min_cols, auto);
     let sizes: Vec<(f32, f32)> = l.pages.iter().map(|p| (p.w, p.h)).collect();
     if v.mode == wordcraft_layout::ViewMode::Web {
         // The sheet runs from side to side of the work area, no centred page with grey margins.
         let rects: Vec<Rect> = sizes
             .iter()
             .scan(0.0f32, |y, &(w, h)| {
-                let r = Rect::from_min_size(pos2(0.0, *y), vec2(sane_dim(w, 1e5) * scale, sane_dim(h, 1e6) * scale));
+                let r = Rect::from_min_size(pos2(left, *y), vec2(sane_dim(w, 1e5) * scale, sane_dim(h, 1e6) * scale));
                 *y = r.bottom();
                 Some(r)
             })
             .collect();
-        let size = vec2(rects.iter().map(|r| r.right()).fold(avail.x.max(0.0), f32::max), rects.last().map_or(0.0, |r| r.bottom()).max(avail.y));
+        let right = crate::spotlight::continuous_gutter(app, scale) - left;
+        let size =
+            vec2(rects.iter().map(|r| r.right() + right).fold(avail.x.max(0.0), f32::max), rects.last().map_or(0.0, |r| r.bottom()).max(avail.y));
         let bands = rects.iter().map(|r| (0.0, r.height())).collect();
         return Geometry { rects, size, scale, cols: 1, bands };
     }
-    let (mut rects, mut size) = place_pages(&sizes, markup, scale, cols, avail);
+    let (mut rects, mut size) = place_pages(&sizes, markup, scale, cols, avail, (left, gutter - left));
     let mut bands: Vec<(f32, f32)> = rects.iter().map(|r| (0.0, r.height())).collect();
     let editing_part = matches!(app.session.sel.focus.story, StoryRef::Part(_));
     if v.hide_white_space && v.mode == wordcraft_layout::ViewMode::Print && !v.read_mode && cols == 1 && !editing_part && rects.len() > 1 {

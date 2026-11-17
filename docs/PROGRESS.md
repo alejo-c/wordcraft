@@ -7,3 +7,4 @@ Format: one line per completed task, newest last, at most 20 words. Architecture
 - Helix mode-switch releases preserve paste tracking; copy/paste uses the system clipboard without private registers.
 - Added Helix view alignment, mode-aware block caret, relative line numbers and optional active-line shading.
 - Resolved documentation conflicts in the Helix follow-up merge into custom.
+- Moved Spotlight paragraph badges outside the page and reserved canvas space for them.

@@ -81,17 +81,17 @@ pub(super) fn reading_viewport(full: Rect, column_px: f32, scale: f32) -> Rect {
 }
 
 /// A single horizontal row of reflowed reading pages; no wrapping at the viewport edge.
-pub(super) fn place_read_pages(sizes: &[(f32, f32)], scale: f32, avail: egui::Vec2) -> (Vec<Rect>, egui::Vec2) {
+pub(super) fn place_read_pages(sizes: &[(f32, f32)], scale: f32, avail: egui::Vec2, gutter: (f32, f32)) -> (Vec<Rect>, egui::Vec2) {
     let mut x = GAP;
     let mut rects = Vec::with_capacity(sizes.len());
     for &(w, h) in sizes {
         let w = sane_dim(w, 20_000.0) * scale;
         let h = sane_dim(h, 20_000.0) * scale;
-        rects.push(Rect::from_min_size(pos2(x, GAP), vec2(w, h)));
-        x += w + GAP;
+        rects.push(Rect::from_min_size(pos2(x + gutter.0, GAP), vec2(w, h)));
+        x += w + GAP + gutter.0 + gutter.1;
     }
     // Extra trailing canvas allows even the last column to sit directly beside the nav pane.
-    let end = rects.last().map_or(avail.x, |p| p.left() + avail.x - GAP);
+    let end = rects.last().map_or(avail.x, |p| p.left() + avail.x - GAP - gutter.0);
     (rects, vec2(x.max(end).max(avail.x), avail.y.max(0.0)))
 }
 
@@ -117,12 +117,16 @@ pub(super) fn reading_anchor_page(layout: &DocLayout, anchor: &Pos) -> Option<us
 /// Turn one reading column left/right. Multiple ticks during an animation queue additional
 /// columns, rather than rounding the partially animated position and losing a tick.
 pub(crate) fn turn_read_page(app: &mut WordApp, direction: f32) {
-    let step = app.session.view.read_width * app.canvas.scale + GAP;
+    let step = reading_step(app, app.canvas.scale);
     if step.is_finite() && step > 0.0 {
         let current = app.canvas.read_target_page.unwrap_or_else(|| (app.canvas.scroll_offset.x / step).round().max(0.0) as usize);
         let next = if direction < 0.0 { current.saturating_sub(1) } else { current.saturating_add(1) };
         app.canvas.read_target_page = Some(next.min(app.canvas.cols.saturating_sub(1)));
     }
+}
+
+pub(super) fn reading_step(app: &WordApp, scale: f32) -> f32 {
+    app.session.view.read_width * scale + crate::spotlight::continuous_gutter(app, scale) + GAP
 }
 
 /// Ease toward an exact column boundary; a late frame never overshoots. The final offset

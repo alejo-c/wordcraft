@@ -4,6 +4,22 @@ use egui::{Align2, Color32, Rect, Sense, Ui, pos2, vec2};
 use wordcraft_doc::{Document, Path, StoryRef};
 use wordcraft_layout::{DocLayout, Page, Placed};
 
+const BLOCK_WIDTH: f32 = 96.0;
+const PAGE_GAP: f32 = 4.0;
+
+pub(crate) fn gutter(app: &crate::WordApp) -> f32 {
+    if app.ui.spotlight { BLOCK_WIDTH + PAGE_GAP } else { 0.0 }
+}
+
+pub(crate) fn on_left(app: &crate::WordApp) -> bool {
+    app.session.view.styles_pane_dock != wordcraft_engine::StylesPaneDock::Left
+}
+
+pub(crate) fn continuous_gutter(app: &crate::WordApp, scale: f32) -> f32 {
+    let width = gutter(app);
+    if width > 0.0 && !on_left(app) { width + crate::canvas::markup_width(app) * scale } else { width }
+}
+
 #[derive(Debug)]
 pub(crate) struct StyleBlock {
     style: String,
@@ -51,25 +67,18 @@ pub(crate) fn indicator(ui: &mut Ui, id: &str, name: &str) {
     response.on_hover_text(name);
 }
 
-fn block_rect(page: &Page, rect: Rect, block: &StyleBlock, left: bool) -> Option<Rect> {
+fn block_rect(page: &Page, rect: Rect, block: &StyleBlock, left: bool, markup: f32) -> Option<Rect> {
     let scale = rect.width() / page.w;
     if !scale.is_finite() || scale <= 0.0 {
         return None;
     }
-    let edge = if left { page.body.x } else { page.body.x + page.body.w };
-    let margin = if left { page.body.x } else { page.w - page.markup - edge };
-    let width = (margin * scale - 8.0).clamp(0.0, 150.0);
-    if width < 4.0 {
-        return None;
-    }
-    let edge = rect.left() + edge * scale;
-    let x = if left { edge - width - 4.0 } else { edge + 4.0 };
-    Some(Rect::from_min_max(pos2(x, rect.top() + block.top * scale), pos2(x + width, rect.top() + block.bottom * scale)))
+    let x = if left { rect.left() - PAGE_GAP - BLOCK_WIDTH } else { rect.right() + markup * scale + PAGE_GAP };
+    Some(Rect::from_min_max(pos2(x, rect.top() + block.top * scale), pos2(x + BLOCK_WIDTH, rect.top() + block.bottom * scale)))
 }
 
-fn paint_page(document: &Document, page: &Page, ui: &Ui, page_rect: Rect, clip: Rect, left: bool) {
+fn paint_page(document: &Document, page: &Page, ui: &Ui, page_rect: Rect, clip: Rect, left: bool, markup: f32) {
     for (index, block) in blocks(document, page).iter().enumerate() {
-        let Some(rect) = block_rect(page, page_rect, block, left) else { continue };
+        let Some(rect) = block_rect(page, page_rect, block, left, markup) else { continue };
         let visible = rect.intersect(clip);
         if !visible.is_positive() {
             continue;
@@ -89,14 +98,19 @@ pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[R
     if !app.ui.spotlight {
         return;
     }
-    let left = app.session.view.styles_pane_dock != wordcraft_engine::StylesPaneDock::Left;
+    let left = on_left(app);
+    let markup = crate::canvas::markup_width(app);
+    let document = crate::canvas::page_doc(app);
     for (index, page) in layout.pages.iter().enumerate() {
         let Some(rect) = rects.get(index).copied() else { continue };
         let Some(&(top, bottom)) = bands.get(index) else { continue };
-        let visible = Rect::from_min_max(pos2(rect.min.x, rect.min.y + top), pos2(rect.max.x, rect.min.y + bottom));
-        let clip = ui.clip_rect().intersect(visible);
-        if clip.is_positive() {
-            paint_page(crate::canvas::page_doc(app), page, ui, rect, clip, left);
+        let viewport = ui.clip_rect();
+        let band = Rect::from_min_max(pos2(viewport.left(), rect.top() + top), pos2(viewport.right(), rect.top() + bottom));
+        let clip = viewport.intersect(band);
+        let edge = if left { rect.left() } else { rect.right() + markup * (rect.width() / page.w) };
+        let (min, max) = if left { (edge - gutter(app), edge) } else { (edge, edge + gutter(app)) };
+        if clip.is_positive() && min < clip.right() && max > clip.left() {
+            paint_page(document, page, ui, rect, clip, left, markup);
         }
     }
 }

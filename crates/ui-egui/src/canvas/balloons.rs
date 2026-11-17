@@ -51,7 +51,8 @@ pub(super) fn balloons(app: &mut WordApp, ui: &mut Ui, painter: &egui::Painter, 
             (pr.max.x + 10.0, (mw * page_scale - 20.0).max(60.0), false)
         } else {
             let w = (FLOAT_WIDTH * page_scale - 20.0).max(60.0);
-            let beside = pr.max.x + 10.0;
+            let spotlight = if crate::spotlight::on_left(app) { 0.0 } else { crate::spotlight::gutter(app) };
+            let beside = pr.max.x + 10.0 + spotlight;
             if beside + w <= view.max.x - 8.0 { (beside, w, false) } else { ((view.max.x - w - 8.0).max(view.min.x + 8.0), w, true) }
         };
         let mut next_y = pr.min.y;

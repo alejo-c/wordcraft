@@ -1,8 +1,7 @@
 # WordCraft roadmap
 
 Status: 2026-11-17. Added Helix view alignment, modal caret rendering and line feedback; interactive acceptance remains pending.
-
-Spotlight status, 2026-11-13: native paragraph-style margin blocks and matching Styles pane indicators; see docs/spotlight.md.
+Spotlight status, 2026-11-17: native paragraph-style badges outside the page and matching Styles pane indicators; see docs/spotlight.md.
 
 > **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-12 · **Change:** minor (added layout.fitOnePage and its Layout › Page Setup ribbon button to condense a multi-page document by one page while preserving typography hierarchy); previously minor (#3398: persistent screen paper colors; parity estimates unchanged); previously minor (#3693: additional Delete Previous Sentence command and shortcut; Word-parity estimates unchanged)
 > **CLI path update:** 2026-11-04 · Options before a non-Unicode input filename no longer make the CLI reject that filename; text option values still require Unicode; `run --file` and `run --script` retain native paths. No ranked gap or readiness estimate changes.
@@ -154,6 +153,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
    (20–30 h).
 
 ## Progress log
+- 2026-11-17: Moved Spotlight badges into a dedicated gutter beside each page.
 
 - 2026-11-17: Helix modal editing adds movement, selection-first edits, rich-text yanking, insertion repeat and persistent preferences.
 - 2026-11-17: Helix loads XDG keymaps, movement arrays and clipboard settings without new crates or subprocesses.

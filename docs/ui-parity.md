@@ -1,8 +1,7 @@
 # UI parity with Microsoft Word
 
 Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relative line numbers and optional active-line shading. Interactive acceptance remains pending.
-
-Spotlight status, 2026-11-13: WordCraft paragraph-style margin blocks and native Styles pane color indicators; manual desktop verification pending.
+Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page and native Styles pane color indicators; manual desktop verification pending.
 
 ## Helix modal editing
 
@@ -176,6 +175,7 @@ Right-click and Shift+F10 keep the compact suggestions menu. The pane is shared 
 Page Setup's margin, paper-size and document-grid number boxes scroll long text inside the field instead of enlarging the dialog (#5650). Readiness estimates unchanged. Accepted long margin values also stay inside the field after focus leaves; their accepted range, units and parsing are unchanged.
 
 ## Revision history
+- 2026-11-17: Spotlight badges moved outside the page in a dedicated canvas gutter.
 
 - 2026-11-13: Added native spotlight with saved visibility and blocks opposite the Styles pane; see spotlight.md.
 
