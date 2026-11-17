@@ -280,6 +280,7 @@ impl WordApp {
             scroll_speed: _,
             touchpad_scroll_speed: _,
             nav_pane: _,
+            spotlight: _,
             author: _,
             window: _,
             language: _,

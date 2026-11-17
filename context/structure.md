@@ -1,0 +1,28 @@
+# Workspace structure
+
+- apps/wordcraft: native desktop application.
+- apps/wordcraft-cli: command line application.
+- apps/wordcraft-web: browser application.
+- crates/control-key: local control channel credentials.
+- crates/doc: document model and styles.
+- crates/docbin: binary Word import.
+- crates/docx: DOCX import and export.
+- crates/engine: editing session and commands.
+- crates/fonts: fonts and shaping.
+- crates/formats: other document formats.
+- crates/geom: geometry and units.
+- crates/layout: pagination and placed content.
+- crates/mcp: agent protocol.
+- crates/metafile: vector metafile handling.
+- crates/pdf: PDF export.
+- crates/render: page rasterization.
+- crates/ui-egui: native editor interface.
+- crates/ui-egui/src/spotlight.rs: paragraph blocks, labels and shared style color indicators.
+- crates/ui-egui/src/spotlight/tests.rs: spotlight regression and headless interaction tests.
+- crates/ui-egui/src/canvas.rs: spotlight painting in the existing page view.
+- crates/ui-egui/src/panes/side.rs: existing Styles pane with paragraph color indicators.
+- crates/zotero: bibliography integration.
+- docs: architecture, parity, roadmap, spotlight symbol map and work tracking.
+- assets: application assets.
+- contributors: contributor metadata.
+- xtask: build and validation tasks.

@@ -522,6 +522,15 @@ impl WordApp {
     pub(crate) fn ui_command(&mut self, id: &str, p: &Value) -> Option<Result<Value, String>> {
         let s = |k: &str| p.get(k).and_then(Value::as_str);
         Some(Ok(match id {
+            "ui.spotlight" => {
+                if let Some(value) = p.get("value") {
+                    let Some(value) = value.as_bool() else { return Some(Err("value must be a boolean".into())) };
+                    self.ui.spotlight = value;
+                } else {
+                    self.ui.spotlight = !self.ui.spotlight;
+                }
+                json!({"spotlight": self.ui.spotlight})
+            }
             "ui.checkForUpdates" | "help.checkForUpdates" => {
                 crate::updates_ui::check(self);
                 Value::Null
@@ -1141,6 +1150,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.keytips"
             | "ui.dark"
             | "ui.theme"
+            | "ui.spotlight"
             | "ui.interfaceSize"
             | "ui.animations"
             | "ui.language"
