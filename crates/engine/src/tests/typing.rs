@@ -9,6 +9,20 @@ use wordcraft_doc::{Pos, StoryRef};
 
 use crate::Session;
 
+#[test]
+fn helix_word_selection_reuses_typing_and_undo() {
+    let mut s = Session::new(wordcraft_doc::Document::from_text("First second"));
+    s.prefs.autocorrect.enabled = false;
+    run(&mut s, "select.helixCursor", json!({}));
+    run(&mut s, "select.helixObject", json!({"object": "word"}));
+    assert_eq!(s.selected_text(), "First");
+    typ(&mut s, "Written");
+    assert_eq!(s.doc.plain_text(StoryRef::Body).trim_end_matches('\n'), "Written second");
+    run(&mut s, "edit.undo", json!({}));
+    assert_eq!(s.doc.plain_text(StoryRef::Body).trim_end_matches('\n'), "First second");
+    assert_eq!(s.selected_text(), "First");
+}
+
 /// Leaf #152: deleting the empty heading above body text must not promote that text to a heading.
 /// Deleting the empty heading mark keeps the next paragraph as body text.
 #[test]

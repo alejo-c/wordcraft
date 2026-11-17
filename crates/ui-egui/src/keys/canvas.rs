@@ -50,13 +50,25 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
     if held.command {
         app.canvas.paste_mods = Some(held);
     }
-    for e in events {
+    for (index, e) in events.iter().cloned().enumerate() {
         // A key closed the window (Mod+W) or brought another forward: the frame's other keys
         // were typed in this one and are dropped.
         if app.windows.shown() != window {
             break;
         }
         if stale_composition(app, &e, &mut batch) {
+            continue;
+        }
+        let text_follows = app.ui.helix_editing
+            && matches!(e, egui::Event::Key { pressed: true, .. })
+            && events
+                .get(index.saturating_add(1)..)
+                .unwrap_or_default()
+                .iter()
+                .take_while(|e| !matches!(e, egui::Event::Key { pressed: true, .. }))
+                .any(|e| matches!(e, egui::Event::Text(_)));
+        if super::helix::event(app, &e, text_follows) {
+            super::helix::after_event(app);
             continue;
         }
         note_key_state(app, &e);
@@ -68,6 +80,7 @@ pub fn canvas_events(app: &mut WordApp, ctx: &egui::Context) {
             continue;
         }
         handle_event(app, ctx, e);
+        super::helix::after_event(app);
     }
 }
 

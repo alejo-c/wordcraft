@@ -177,6 +177,7 @@ pub struct CanvasState {
     pub(crate) rasters: u64,
     pub canvas_rect: Option<Rect>,
     pub focused: bool,
+    pub(crate) helix: crate::keys::helix::State,
     /// The page's widget id and the pass that last drew it, so a click elsewhere can hand the
     /// keyboard straight back to it (`WordApp::refocus_after_chrome_click`).
     pub(crate) widget_id: Option<(egui::Id, u64)>,
@@ -413,6 +414,7 @@ impl Default for CanvasState {
             rasters: 0,
             canvas_rect: None,
             focused: false,
+            helix: Default::default(),
             widget_id: None,
             render_ms: 0.0,
             ime_preedit: String::new(),
@@ -1548,6 +1550,7 @@ fn finish_canvas_frame(finish: CanvasFinish<'_>, out: egui::scroll_area::ScrollA
     crate::mini_toolbar::track_dismissal(app, ui.ctx(), area);
     if let Some(sel) = app.canvas.mini_anchor
         && app.ui.mini_toolbar
+        && !app.ui.helix_editing
     {
         crate::mini_toolbar::show(app, ui.ctx(), sel, out.inner_rect);
     }

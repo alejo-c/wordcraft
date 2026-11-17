@@ -292,6 +292,7 @@ impl WordApp {
             check_spelling: _,
             caret_animation: _,
             keyboard: _,
+            helix_editing: _,
             ribbon: _,
             caption_labels: _,
             last_caption_label: _,

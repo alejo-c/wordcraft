@@ -152,7 +152,7 @@ fn visual_lr(s: &mut Session, v: &Value, is_left: bool) -> CmdResult {
     sel_result(s)
 }
 
-fn left(s: &mut Session, p: &Pos) -> Pos {
+pub(super) fn left(s: &mut Session, p: &Pos) -> Pos {
     if let Some(para) = s.doc.para_at(p)
         && p.off > 0
     {
@@ -167,7 +167,7 @@ fn left(s: &mut Session, p: &Pos) -> Pos {
     }
 }
 
-fn right(s: &mut Session, p: &Pos) -> Pos {
+pub(super) fn right(s: &mut Session, p: &Pos) -> Pos {
     if let Some(para) = s.doc.para_at(p)
         && p.off < para.len()
     {
@@ -283,7 +283,7 @@ fn page(s: &mut Session, v: &Value, dir: i32) -> CmdResult {
 
 /// How far Page Up/Down move in the continuous views: the height of the text area of the
 /// section `at` is in (the first section when `at` isn't in the body), at least an inch.
-fn page_step(s: &Session, at: &Pos) -> f32 {
+pub(super) fn page_step(s: &Session, at: &Pos) -> f32 {
     let block = if at.story == StoryRef::Body { at.path.0.first().map_or(0, |&i| i as usize) } else { 0 };
     let sections = s.doc.sections();
     let sect = sections.iter().find(|(end, _)| *end >= block).or(sections.last()).map(|(_, p)| *p);

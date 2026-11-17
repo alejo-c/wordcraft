@@ -1,5 +1,32 @@
 # WordCraft architecture
 
+Status: 2026-11-17. Added a separate Helix selection command module and optional modal keyboard adapter.
+
+## Helix symbols
+
+- crates/engine/src/cmd/helix.rs:9: specs registers modal movement, character selection, line selection, find, flip, text objects and replacement.
+- Uses: Session, Selection, cmd::caret movement and page geometry, document cluster boundaries, existing selection and text-edit primitives.
+- Used by: cmd::registry, the modal canvas adapter, CLI and MCP command dispatch, modal engine tests.
+- crates/ui-egui/src/keys/helix.rs:56: State holds per-window mode, pending sequences, counts, rich-text yank storage and bounded insertion recordings.
+- Uses: CanvasState, UiState::helix_editing, WordApp::run, existing engine edit and movement commands.
+- Used by: canvas_events, UI mode commands, Options and the status bar; modal keyboard and focus regressions.
+- crates/ui-egui/src/keys/helix.rs:534: event consumes modal keys and text before the ordinary canvas handlers; after_event at line 201 records accepted insert mutations.
+- Uses: State, engine revision and undo depth, existing IME interruption and undo-join APIs.
+- Used by: keys::canvas::canvas_events.
+- crates/engine/src/cmd/caret.rs:155: left, right and page_step are shared within cmd for existing Word navigation and the Helix adapter.
+- Uses: document caret boundaries, paragraph navigation and section page geometry.
+- Used by: cmd::caret and cmd::helix.
+- crates/ui-egui/src/keys/helix.rs:96: command implements ui.helix and ui.helixMode; status at line 71 formats the active mode and pending keys.
+- Uses: UiState persistence, CanvasState::helix, existing caret commands.
+- Used by: WordApp::ui_command, Options > Advanced > Customize, chrome::status_bar.
+- UiState::helix_editing is an application preference; CanvasState::helix travels with the existing per-window canvas state. Document switches reset mode and pending input.
+
+## Helix revision history
+
+- 2026-11-17: Added command and keyboard-adapter symbol references for optional Helix modal editing.
+
+## Architecture overview
+
 > **Last reviewed:** 2026-10-28 · **Last updated:** 2026-11-05 · **Change:** trivial (the hostile-parameter test now has a sibling for `file.*`, `insert.picture` and `insert.textFromFile`; previously trivial: craft-proof's row says what a build without the Language data keeps: English spelling from an installed Hunspell English or the built-in list, rule hyphenation for Bulgarian, Turkish and Russian; previously minor: proofing moved out: `wordcraft-proof` is craft-libs' `craft-proof`, its Language data craft-i18n's `language-data/` embedded from `CRAFT_I18N_DIR`; previously major: crate and layer inventory, source counts, proofing languages and module boundaries re-measured from this checkout; previously minor: `proof` is per language: English and Polish; previously major: first committed version; `plan/architecture.md` is local-only) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 How WordCraft is built today. The longer design notes in
