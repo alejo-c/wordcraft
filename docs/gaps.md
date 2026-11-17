@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-Status: 2026-11-17. Helix mode switching tracks paste presses and uses the system clipboard without registers. Interactive acceptance remains pending.
+Status: 2026-11-17. Helix canvas adds view alignment, modal caret rendering and line feedback. Interactive acceptance remains pending.
 
 ## Helix editing extension
 
@@ -10,6 +10,7 @@ Status: 2026-11-17. Helix mode switching tracks paste presses and uses the syste
 - Native user keymaps load from the Helix XDG configuration. Shell integrations and custom clipboard commands remain unsupported; see docs/ui-parity.md.
 - 2026-11-17 revision: recorded the optional modal editing extension without changing ranked Word gaps.
 - 2026-11-17 revision: fixed v-release paste routing and unified Helix copy/paste with the system clipboard; verify interactively.
+- 2026-11-17 revision: added vertical view alignment, block caret rendering, relative line numbers and optional line shading.
 
 ## Word gap assessment
 

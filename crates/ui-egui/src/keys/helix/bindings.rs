@@ -14,6 +14,7 @@ enum Action {
     KillLine,
     Delete(bool),
     Scroll(bool),
+    Align(egui::Align),
     Find(bool, bool, bool),
     Noop,
     Reload,
@@ -98,6 +99,9 @@ fn resolve(name: &str) -> Option<Action> {
         "kill_to_line_end" => Action::KillLine,
         "scroll_up" => Action::Scroll(true),
         "scroll_down" => Action::Scroll(false),
+        "align_view_top" => Action::Align(egui::Align::Min),
+        "align_view_center" => Action::Align(egui::Align::Center),
+        "align_view_bottom" => Action::Align(egui::Align::Max),
         "find_next_char" => Action::Find(false, false, false),
         "find_prev_char" => Action::Find(true, false, false),
         "find_till_char" => Action::Find(false, true, false),
@@ -222,6 +226,7 @@ fn run(app: &mut WordApp, action: Action) -> Result<(), String> {
         Action::ClipboardCopy => clipboard_copy(app)?,
         Action::ClipboardPaste(before, replace) => clipboard_paste(app, before, replace, true)?,
         Action::Delete(change) => delete(app, change, false)?,
+        Action::Align(align) => app.canvas.helix_align = Some(align),
         Action::Scroll(up) => {
             let count = take_count(app);
             let pos = app.session.sel.focus.clone();

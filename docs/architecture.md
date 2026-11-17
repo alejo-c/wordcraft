@@ -1,35 +1,39 @@
 # WordCraft architecture
 
-Status: 2026-11-17. Helix editing uses the system clipboard and records paste-key state before modal dispatch.
+Status: 2026-11-17. Helix view alignment and line feedback use the existing canvas layout and scroll state.
 
 ## Helix symbols
 
 - crates/engine/src/cmd/helix.rs:9: specs registers modal movement, character selection, line selection, find, flip, text objects and replacement.
 - Uses: Session, Selection, cmd::caret movement and page geometry, document cluster boundaries, existing selection and text-edit primitives.
 - Used by: cmd::registry, the modal canvas adapter, CLI and MCP command dispatch, modal engine tests.
-- crates/ui-egui/src/keys/helix.rs:58: State holds per-window mode, pending sequences, counts and bounded insertion recordings without a yank register.
+- crates/ui-egui/src/keys/helix.rs:59: State holds per-window mode, pending sequences, counts and bounded insertion recordings without a yank register.
 - Uses: CanvasState, UiState::helix_editing, WordApp::run, existing engine edit and movement commands.
 - Used by: canvas_events, UI mode commands, Options and the status bar; modal keyboard and focus regressions.
-- crates/ui-egui/src/keys/helix.rs:521: event consumes modal keys and text before the ordinary canvas handlers; after_event at line 209 records accepted insert mutations.
+- crates/ui-egui/src/keys/helix.rs:544: event consumes modal keys and text before the ordinary canvas handlers; after_event records accepted insert mutations.
 - Uses: State, engine revision and undo depth, existing IME interruption and undo-join APIs.
 - Used by: keys::canvas::canvas_events.
 - crates/engine/src/cmd/caret.rs:155: left, right and page_step are shared within cmd for existing Word navigation and the Helix adapter.
 - Uses: document caret boundaries, paragraph navigation and section page geometry.
 - Used by: cmd::caret and cmd::helix.
-- crates/ui-egui/src/keys/helix.rs:99: command implements ui.helix and ui.helixMode; status at line 73 formats the active mode and pending keys.
+- crates/ui-egui/src/keys/helix.rs:105: command implements ui.helix and ui.helixMode; status formats the active mode and pending keys.
 - Uses: UiState persistence, CanvasState::helix, existing caret commands.
 - Used by: WordApp::ui_command, Options > Advanced > Customize, chrome::status_bar.
 - UiState::helix_editing is an application preference; CanvasState::helix travels with the existing per-window canvas state. Document switches reset mode and pending input.
 - crates/ui-egui/src/keys/helix/config.rs:32: Config implements FromStr, bounded native configuration loading, XDG path resolution, normalized key names and per-mode binding lookup. Configuration is held once per application and shared across document windows.
 - Uses: the existing locked toml dependency, wordcraft_engine::io::read_regular_file_within, native environment variables, Mode and WordApp::helix_config.
 - Used by: Helix enablement, the canvas event adapter, explicit configuration reload and configuration regression tests.
-- crates/ui-egui/src/keys/helix/bindings.rs:287: custom dispatches nested user bindings; execute validates command arrays; clipboard_copy and clipboard_paste enforce the configured clipboard policy.
+- crates/ui-egui/src/keys/helix/bindings.rs:292: custom dispatches nested user bindings; execute validates command arrays; clipboard_copy and clipboard_paste enforce the configured clipboard policy.
 - Uses: Config::binding, existing Helix editing helpers, WordApp::run, native clipboard services and the single-selection model.
 - Used by: modal key and committed-text handlers, built-in system-clipboard bindings and keyboard regression tests.
 - Default y, d, c, p, P and R use clipboard_copy and clipboard_paste, including configured aliases. execute checks their clipboard policy before running command arrays. The private Helix register and its yank/paste helpers are removed.
 - crates/ui-egui/src/keys/canvas.rs:171: note_key_state records key presses and paste modifiers before Helix consumes events, preventing a modal v release from inheriting stale paste modifiers.
 - Uses: CanvasState::v_pressed, CanvasState::paste_mods, shortcuts::is_modifier_key.
 - Used by: canvas_events and native paste-release fallback.
+- crates/engine/src/cmd/helix.rs:52: cursor resolves the active character of an inclusive modal selection.
+- crates/ui-egui/src/canvas.rs:642: update_caret_scroll converts the pending Helix alignment into a viewport offset at the active caret.
+- crates/ui-egui/src/canvas/cursor.rs:6: paint_helix_lines derives the gutter and optional focus shading from the active story's laid-out lines.
+- crates/ui-egui/src/canvas/cursor.rs:77: paint_caret_bar draws the insertion bar or modal block from the caret animation geometry.
 - Native clipboard provider names choose WordCraft's existing clipboard integration rather than executing the provider's Helix helper programs. Browser builds retain default keymaps without reading environment variables or local files.
 
 ## Helix revision history
@@ -37,6 +41,7 @@ Status: 2026-11-17. Helix editing uses the system clipboard and records paste-ke
 - 2026-11-17: Added command and keyboard-adapter symbol references for optional Helix modal editing.
 - 2026-11-17: Added XDG configuration and custom binding modules; reused the existing TOML parser and bounded file reader.
 - 2026-11-17: Removed Helix register storage and reused system clipboard helpers; moved paste-key tracking before modal dispatch.
+- 2026-11-17: Reused canvas scrolling and line geometry for Helix viewport alignment and caret feedback.
 
 ## Architecture overview
 

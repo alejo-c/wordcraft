@@ -37,6 +37,51 @@ fn configured(text: &str, config: &str) -> WordApp {
 }
 
 #[test]
+fn view_alignment_preserves_selection_and_uses_committed_keys() {
+    let mut a = app("one\ntwo\nthree");
+    text(&mut a, "vj");
+    let before = a.session.sel.clone();
+    let revision = a.session.rev();
+    for (key, committed, align) in
+        [(Key::T, "t", egui::Align::Min), (Key::Z, "z", egui::Align::Center), (Key::M, "m", egui::Align::Center), (Key::B, "b", egui::Align::Max)]
+    {
+        frame(&mut a, vec![press(Key::Z, Modifiers::NONE), Event::Text("z".into())]);
+        frame(&mut a, vec![press(key, Modifiers::NONE), Event::Text(committed.into())]);
+        assert_eq!(a.canvas.helix_align.take(), Some(align));
+        assert_eq!(a.session.sel, before);
+        assert_eq!(a.session.rev(), revision);
+        assert_eq!(a.canvas.helix.mode, Mode::Select);
+    }
+    text(&mut a, "z");
+    frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
+    assert_eq!(a.session.sel, before);
+    assert_eq!(a.canvas.helix.mode, Mode::Select);
+}
+
+#[test]
+fn pointer_repositioning_keeps_the_mode_caret() {
+    let mut a = app("first\nsecond");
+    for mode in [Mode::Normal, Mode::Select, Mode::Insert] {
+        set_mode(&mut a, mode).unwrap();
+        frame(
+            &mut a,
+            vec![Event::PointerButton { pos: egui::Pos2::ZERO, button: egui::PointerButton::Primary, pressed: true, modifiers: Modifiers::NONE }],
+        );
+        a.run("caret.set", json!({"pos": wordcraft_doc::Pos::body(1, 0)})).unwrap();
+        assert_eq!(a.canvas.helix.mode, mode);
+        assert_eq!(block_caret(&a), mode != Mode::Insert);
+    }
+}
+
+#[test]
+fn helix_editor_reads_line_display_settings() {
+    let a = configured("text", "[editor]\ncursorline = true\nline-number = 'absolute'");
+    let config = a.helix_config.as_ref().unwrap();
+    assert!(config.cursorline);
+    assert!(config.absolute_line_numbers);
+}
+
+#[test]
 fn custom_movements_arrays_counts_and_modes_override_defaults() {
     let mut a = configured(
         "one two three",

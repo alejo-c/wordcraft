@@ -123,6 +123,7 @@ pub struct CanvasState {
     /// revision: finding out walks every paragraph, too slow for every frame (#811).
     markup_facts: std::cell::Cell<Option<((u64, u64), [bool; 3])>>,
     pub scroll_to_caret: bool,
+    pub(crate) helix_align: Option<egui::Align>,
     /// Set while a command runs for a mouse drag on a table: the pointer is already
     /// on the target, so the view stays put instead of following the caret (#1738).
     pub keep_view: bool,
@@ -387,6 +388,7 @@ impl Default for CanvasState {
             page_keys: PageKeys::default(),
             markup_facts: std::cell::Cell::new(None),
             scroll_to_caret: true,
+            helix_align: None,
             keep_view: false,
             nav_to_caret: false,
             read_wheel_accum: 0.0,
@@ -637,9 +639,31 @@ fn prepare_view(app: &mut WordApp, ui: &Ui, full: Rect, layout: &DocLayout) -> C
     CanvasView { area, hruler, vruler, paper, animate, zooming, hinted, opts, geo, dim_body, grid_story, caret, rescaled }
 }
 
-fn update_caret_scroll(app: &mut WordApp, view: &CanvasView) -> Option<Rect> {
+fn update_caret_scroll(app: &mut WordApp, view: &CanvasView, layout: &DocLayout) -> Option<Rect> {
     let mut target = None;
-    if app.canvas.nav_to_caret {
+    if let Some(align) = app.canvas.helix_align.take()
+        && !app.session.view.read_mode
+    {
+        let pos =
+            if crate::keys::helix::block_caret(app) { wordcraft_engine::cmd::helix::cursor(&app.session) } else { app.session.sel.focus.clone() };
+        if let Some(c) = layout.caret_on(&pos, app.session.page_hint)
+            && let Some(pr) = view.geo.rects.get(c.page)
+        {
+            let scale = layout.pages.get(c.page).map_or(view.geo.scale, |page| page_screen_scale(*pr, page, view.geo.scale));
+            let top = pr.top() + c.top * scale;
+            let height = app.canvas.viewport.map_or(view.area.height(), |rect| rect.height());
+            let gap = height - c.height * scale;
+            let y = top
+                - gap
+                    * match align {
+                        egui::Align::Min => 0.0,
+                        egui::Align::Center => 0.5,
+                        egui::Align::Max => 1.0,
+                    };
+            app.canvas.scroll_request = Some(vec2(app.canvas.scroll_offset.x, y));
+            app.canvas.nav_to_caret = false;
+        }
+    } else if app.canvas.nav_to_caret {
         app.canvas.read_target_page = None;
         if let Some(c) = view.caret
             && let Some(pr) = view.geo.rects.get(c.page)
@@ -1633,7 +1657,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     let full = ui.available_rect_before_wrap();
     let layout = prepare_layout(app, ui, full);
     let view = prepare_view(app, ui, full, &layout);
-    let scroll_target = if hold_scroll_for_preview(app) { None } else { update_caret_scroll(app, &view) };
+    let scroll_target = if hold_scroll_for_preview(app) { None } else { update_caret_scroll(app, &view, &layout) };
     let motion = scroll_motion(app, ui, full, &view);
     let (scroll_area, scroll_base) = configure_scroll_area(app, ui, &view, motion);
     let CanvasView { area, hruler, vruler, paper, zooming, hinted, geo, dim_body, grid_story, caret, rescaled, .. } = view;
@@ -1684,6 +1708,8 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             grid_story,
         });
         paint_white_space_seams(&painter, &rects, &geo, &t);
+        let focused = resp.has_focus() || app.canvas.focused;
+        cursor::paint_helix_lines(app, &painter, &layout, &rects, geo.scale, focused && ui.input(|i| i.focused), &t);
         if rendered > 0 {
             app.canvas.render_ms = crate::now_ms() - t0;
         }
@@ -1771,7 +1797,6 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         crate::content_controls::paint(app, &painter, &t, &layout, &rects, geo.scale);
         paint_read_aloud_highlight(app, &painter, &layout, &rects, &geo, &t);
         // Caret.
-        let focused = resp.has_focus() || app.canvas.focused;
         // After an automatic change the web's text agent starts afresh
         // (`keys::note_automatic_change`) — only there, because on X11 an interrupt recreates the
         // input context and fcitx drops later keys (#1169). A body replacement interrupts on every
@@ -1849,8 +1874,17 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 }
             }
         }
+        let modal_caret = crate::keys::helix::block_caret(app)
+            && preview_sel(app).is_none()
+            && crate::objects::selected(app).is_none()
+            && app.session.cell_range().is_none()
+            && app.session.column_segments().is_none();
+        let modal_pos = modal_caret.then(|| wordcraft_engine::cmd::helix::cursor(&app.session));
+        let selection = preview_sel(app).unwrap_or(&app.session.sel);
+        let pos = modal_pos.as_ref().unwrap_or(&selection.focus);
+        let collapsed = selection.is_collapsed();
         if !math_caret
-            && let Some(c) = layout.caret_on(&preview_sel(app).unwrap_or(&app.session.sel).focus, app.session.page_hint)
+            && let Some(c) = layout.caret_on(pos, app.session.page_hint)
             && let Some(pr) = rects.get(c.page)
         {
             let scale = layout.pages.get(c.page).map_or(geo.scale, |page| page_screen_scale(*pr, page, geo.scale));
@@ -1905,7 +1939,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
                 [pos2(x.round() + 0.5, y0), pos2(x.round() + 0.5, y1)]
             };
             // The caret glides and fades like Word's (`caret_glide`).
-            let shown = preview_sel(app).unwrap_or(&app.session.sel).is_collapsed() && focused;
+            let shown = (collapsed || modal_caret) && focused;
             let look = crate::caret_glide::look(
                 app,
                 ui,
@@ -1913,7 +1947,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             );
             if shown && look.opacity > 0.0 {
                 let color = preedit_color.unwrap_or_else(|| caret_color(app));
-                painter.line_segment(look.bar, Stroke::new(1.5, color.gamma_multiply(look.opacity)));
+                cursor::paint_caret_bar(&painter, look.bar, color, look.opacity, modal_caret.then_some(c.height.max(c.width) * scale));
             }
             if focused {
                 ui.ctx().request_repaint_after(std::time::Duration::from_millis(530 - (since as u64 % 530)));

@@ -1137,6 +1137,79 @@ fn the_status_bar_names_the_page_in_view_not_only_the_caret_page() {
     assert_eq!((h.state().session.rev(), &h.state().session.sel), (rev, &sel), "scrolling changes neither the document nor the selection");
 }
 
+#[test]
+fn helix_view_alignment_places_the_caret_without_moving_it() {
+    let text = vec!["A line of text."; 120].join("\n");
+    let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text(&text)), Default::default());
+    a.helix_config = Some(crate::keys::helix::config::Config::default());
+    a.run("ui.helix", json!({"value": true})).unwrap();
+    a.run("caret.set", json!({"pos": Pos::body(60, 0)})).unwrap();
+    let sel = a.session.sel.clone();
+    let mut h = egui_kittest::Harness::builder().with_size(vec2(1100.0, 700.0)).build_ui_state(
+        |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        a,
+    );
+    h.run_steps(6);
+    for (key, align) in [("t", egui::Align::Min), ("z", egui::Align::Center), ("b", egui::Align::Max)] {
+        h.input_mut().events.extend([egui::Event::Text("z".into()), egui::Event::Text(key.into())]);
+        h.run_steps(6);
+        let area = h.state().canvas.viewport.unwrap();
+        let (at, height) = caret_screen(h.state_mut()).unwrap();
+        let (actual, target) = match align {
+            egui::Align::Min => (at.y, area.top()),
+            egui::Align::Center => (at.y + height / 2.0, area.center().y),
+            egui::Align::Max => (at.y + height, area.bottom()),
+        };
+        assert!((actual - target).abs() <= 2.0, "{key}: {actual} vs {target}");
+        assert_eq!(h.state().session.sel, sel);
+    }
+}
+
+#[test]
+fn helix_line_feedback_follows_focus_and_mode() {
+    let doc = wordcraft_doc::Document::from_text("one\ntwo\nthree\nfour");
+    let mut app = WordApp::new(wordcraft_engine::Session::new(doc), Default::default());
+    app.helix_config = Some("[editor]\ncursorline = true\nline-number = 'relative'".parse().unwrap());
+    app.run("ui.helix", json!({"value": true})).unwrap();
+    app.run("caret.set", json!({"pos": Pos::body(1, 0)})).unwrap();
+    let layout = app.session.layout();
+    let page = &layout.pages[0];
+    let rect = Rect::from_min_size(Pos2::ZERO, vec2(page.w, page.h));
+    let ctx = egui::Context::default();
+    let paint = |app: &WordApp, focused| {
+        let tokens = Tokens::get(&ctx);
+        let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(rect), ..Default::default() }, |ui| {
+            cursor::paint_helix_lines(app, &ui.painter_at(rect), &layout, &[rect], 1.0, focused, &tokens);
+        });
+        output.textures_delta.clear();
+        let labels: Vec<_> = output
+            .shapes
+            .iter()
+            .filter_map(|item| match &item.shape {
+                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+                _ => None,
+            })
+            .collect();
+        let shaded =
+            output.shapes.iter().any(|item| matches!(&item.shape, egui::Shape::Rect(shape) if shape.fill == tokens.accent.gamma_multiply(0.13)));
+        (labels, shaded)
+    };
+    let (labels, shaded) = paint(&app, true);
+    assert_eq!(labels, ["1", "2", "1", "2"]);
+    assert!(shaded);
+    let (labels, shaded) = paint(&app, false);
+    assert_eq!(labels, ["1", "2", "3", "4"]);
+    assert!(!shaded);
+    app.run("ui.helixMode", json!({"mode": "insert"})).unwrap();
+    let (labels, shaded) = paint(&app, true);
+    assert_eq!(labels, ["1", "2", "3", "4"]);
+    assert!(shaded);
+}
+
 /// `viewed_page`: the caret's page while any of its line is on screen, else the window's top page.
 #[test]
 fn the_page_in_view_follows_the_caret_while_it_is_on_screen() {

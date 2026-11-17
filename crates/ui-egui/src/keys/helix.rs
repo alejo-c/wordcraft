@@ -27,6 +27,7 @@ impl Mode {
 #[derive(Clone, Copy)]
 enum Pending {
     Goto,
+    View,
     Space,
     Find { backward: bool, till: bool },
     Replace,
@@ -70,6 +71,10 @@ pub(crate) struct State {
     custom_prefix: Vec<String>,
 }
 
+pub(crate) fn block_caret(app: &WordApp) -> bool {
+    app.ui.helix_editing && app.canvas.helix.mode != Mode::Insert
+}
+
 pub(crate) fn status(app: &WordApp) -> String {
     let state = &app.canvas.helix;
     let mode = match state.mode {
@@ -79,6 +84,7 @@ pub(crate) fn status(app: &WordApp) -> String {
     };
     let prefix = match state.pending {
         Some(Pending::Goto) => " g",
+        Some(Pending::View) => " z",
         Some(Pending::Space) => " Space",
         Some(Pending::Find { backward: false, till: false }) => " f",
         Some(Pending::Find { backward: true, till: false }) => " F",
@@ -287,6 +293,14 @@ fn repeat_insert(app: &mut WordApp) -> Result<(), String> {
 fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
     if let Some(pending) = app.canvas.helix.pending.take() {
         match pending {
+            Pending::View => {
+                app.canvas.helix_align = match text {
+                    "t" => Some(egui::Align::Min),
+                    "z" | "c" | "m" => Some(egui::Align::Center),
+                    "b" => Some(egui::Align::Max),
+                    _ => None,
+                };
+            }
             Pending::Goto => match text {
                 "g" if app.canvas.helix.count != 0 => motion(app, "line")?,
                 "g" => motion(app, "docStart")?,
@@ -361,6 +375,7 @@ fn character(app: &mut WordApp, text: &str) -> Result<(), String> {
         "o" | "O" => open_line(app, text == "O")?,
         "v" => set_mode(app, if app.canvas.helix.mode == Mode::Select { Mode::Normal } else { Mode::Select })?,
         "g" => app.canvas.helix.pending = Some(Pending::Goto),
+        "z" => app.canvas.helix.pending = Some(Pending::View),
         "m" => app.canvas.helix.pending = Some(Pending::Match),
         " " => app.canvas.helix.pending = Some(Pending::Space),
         "f" | "F" | "t" | "T" => {
@@ -440,11 +455,19 @@ fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<
         return Ok(true);
     }
     if key == Key::Escape {
+        if matches!(app.canvas.helix.pending, Some(Pending::View)) {
+            app.canvas.helix.pending = None;
+            app.canvas.helix.count = 0;
+            return Ok(true);
+        }
         set_mode(app, Mode::Normal)?;
         return Ok(true);
     }
     if m.mac_cmd || (m.command && !m.ctrl) {
         return Ok(false);
+    }
+    if matches!(app.canvas.helix.pending, Some(Pending::View)) && !printable {
+        return character(app, "").map(|()| true);
     }
     if m.ctrl && !m.alt && !m.shift {
         let id = if app.canvas.helix.mode == Mode::Insert {

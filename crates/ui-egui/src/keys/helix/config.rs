@@ -32,6 +32,8 @@ pub(super) enum Clipboard {
 pub(crate) struct Config {
     maps: BTreeMap<String, Binding>,
     pub(super) clipboard: Clipboard,
+    pub(crate) cursorline: bool,
+    pub(crate) absolute_line_numbers: bool,
     path: Option<PathBuf>,
     error: Option<String>,
 }
@@ -64,6 +66,10 @@ impl std::str::FromStr for Config {
                 Some("pasteboard" | "wayland" | "x-clip" | "x-sel" | "win-32-yank" | "windows") => Clipboard::Native,
                 _ => Clipboard::Unsupported,
             };
+        }
+        if let Some(editor) = root.get("editor") {
+            config.cursorline = editor.get("cursorline").and_then(toml::Value::as_bool).unwrap_or(false);
+            config.absolute_line_numbers = editor.get("line-number").and_then(toml::Value::as_str) == Some("absolute");
         }
         Ok(config)
     }

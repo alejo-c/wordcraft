@@ -1,6 +1,6 @@
 # UI parity with Microsoft Word
 
-Status: 2026-11-17. Helix mode switching preserves paste-key tracking and uses clipboard-only copy/paste. Interactive acceptance remains pending.
+Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relative line numbers and optional active-line shading. Interactive acceptance remains pending.
 
 ## Helix modal editing
 
@@ -14,6 +14,10 @@ Status: 2026-11-17. Helix mode switching preserves paste-key tracking and uses c
 - The status bar shows Normal, Insert or Select and any pending count or key sequence. Clicking it returns to Normal.
 - Normal mode starts with a selected character. Movements replace the selection; v enters Select, where movements extend it. Escape returns to Normal.
 - h/j/k/l and arrow keys move by character or visual line. w/b/e and W/B/E move by word or whitespace-delimited word. Counts precede movements.
+- In Normal and Select, zt aligns the caret with the top, zz/zc/zm center it vertically, and zb aligns it with the bottom. The scroll range limits alignment at document boundaries. The caret and selection stay in place.
+- Normal and Select use a block caret, including after a click. Insert uses the text insertion bar.
+- Line numbers follow the rendered lines of the active story. In focused Normal and Select, the current line shows its absolute number and surrounding lines show their distance from it. Insert and an unfocused canvas show absolute numbers. Desktop users can set line-number = "absolute" under [editor] in their Helix config.
+- Set cursorline = true under [editor] in the desktop Helix config to shade the current visual line, including within a wrapped paragraph.
 - gg/ge go to document boundaries; gh/gl/gs go to line boundaries or the first nonblank character; a count before gg or G selects a paragraph by number.
 - f/F/t/T wait for a character and search across paragraphs. Alt+. repeats the last character motion.
 - i/a/I/A insert before, after, at line start or at line end. o/O open a paragraph below or above. c changes the selection; d deletes it.
@@ -39,6 +43,7 @@ Status: 2026-11-17. Helix mode switching preserves paste-key tracking and uses c
 - 2026-11-17: Added optional Helix modes, movement, selection-first edits, saved preferences and mode status.
 - 2026-11-17: Added XDG configuration loading, custom modal keymaps and native clipboard configuration without new crates or subprocesses.
 - 2026-11-17: Fixed stale paste modifiers on modal v releases and replaced the private Helix register with system clipboard commands.
+- 2026-11-17: Added canvas-only view alignment, modal caret rendering, line numbers and configurable active-line shading.
 
 ## Word UI assessment
 
