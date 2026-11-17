@@ -5,7 +5,9 @@ use serde_json::json;
 use wordcraft_engine::Session;
 
 fn app(text: &str) -> WordApp {
-    WordApp::new(Session::new(Document::from_text(text)), Services::default())
+    let mut app = WordApp::new(Session::new(Document::from_text(text)), Services::default());
+    app.ui.spotlight = true;
+    app
 }
 
 #[test]
@@ -43,11 +45,11 @@ fn spotlight_uses_the_same_color_for_document_and_pane_after_reopening() {
     assert!(app.ui.spotlight);
     assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), original);
     let old: UiState = serde_json::from_str("{}").unwrap();
-    assert!(old.spotlight);
+    assert!(!old.spotlight);
 }
 
 #[test]
-fn spotlight_geometry_stays_in_the_margin_on_either_side_at_any_zoom() {
+fn spotlight_geometry_stays_outside_the_page_and_markup_at_any_zoom() {
     let mut app = app("Paragraph");
     let layout = app.session.layout();
     let page = &layout.pages[0];
@@ -55,16 +57,35 @@ fn spotlight_geometry_stays_in_the_margin_on_either_side_at_any_zoom() {
     for scale in [0.3, 1.0, 2.5] {
         let page_rect = Rect::from_min_size(pos2(120.0, -250.0), vec2(page.w * scale, page.h * scale));
         for left in [true, false] {
-            let rect = block_rect(page, page_rect, &block, left).unwrap();
-            assert!(rect.left() >= page_rect.left());
-            assert!(rect.right() <= page_rect.right() - page.markup * scale);
+            let markup = 216.0;
+            let rect = block_rect(page, page_rect, &block, left, markup).unwrap();
+            assert!((rect.width() - BLOCK_WIDTH).abs() < 0.001);
             assert_eq!(rect.top(), page_rect.top() + block.top * scale);
             assert!((rect.height() - (block.bottom - block.top) * scale).abs() < 0.001);
             if left {
-                assert!(rect.right() < page_rect.left() + page.body.x * scale);
+                assert!(rect.right() < page_rect.left());
             } else {
-                assert!(rect.left() > page_rect.left() + (page.body.x + page.body.w) * scale);
+                assert!(rect.left() > page_rect.right() + markup * scale);
             }
+        }
+    }
+}
+
+#[test]
+fn spotlight_reserves_a_gutter_for_each_page_in_a_row() {
+    let mut app = app(&"A paragraph with many words. ".repeat(800));
+    app.session.view.zoom = 0.35;
+    let layout = app.session.layout();
+    let viewport = vec2(1000.0, 700.0);
+    for dock in [wordcraft_engine::StylesPaneDock::Left, wordcraft_engine::StylesPaneDock::Right] {
+        app.session.view.styles_pane_dock = dock;
+        let geo = crate::canvas::geometry(&app, &layout, viewport);
+        assert!(geo.cols >= 2);
+        for (page, rect) in layout.pages.iter().zip(&geo.rects).take(geo.cols) {
+            let block = blocks(&app.session.doc, page).remove(0);
+            let badge = block_rect(page, *rect, &block, on_left(&app), 0.0).unwrap();
+            assert!(badge.left() >= 0.0 && badge.right() <= geo.size.x);
+            assert!(geo.rects.iter().take(geo.cols).all(|page| !page.intersects(badge)));
         }
     }
 }
@@ -95,7 +116,8 @@ fn spotlight_pane_indicators_match_badges_and_style_buttons_still_apply() {
     };
     let rects = fills(&h);
     assert!(rects.iter().any(|r| r.width() == 10.0 && r.height() == 10.0), "the Styles pane shows its color indicator");
-    assert!(rects.iter().any(|r| r.width() > 15.0), "the document shows the matching badge");
+    let page = h.state().canvas.page_rects[0];
+    assert!(rects.iter().any(|r| r.width() > 15.0 && r.right() < page.left()), "the canvas shows the matching badge");
     let pane_spotlight = h.get_all_by_label("Spotlight").last().unwrap();
     pane_spotlight.click();
     h.run_steps(3);
@@ -111,7 +133,9 @@ fn spotlight_pane_indicators_match_badges_and_style_buttons_still_apply() {
     h.state_mut().run("view.stylesPaneDock", json!({"dock": "left"})).unwrap();
     h.run_steps(3);
     let page = h.state().canvas.page_rects[0];
-    assert!(h.output().shapes.iter().any(
-        |s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == color("Heading1") && r.rect.width() > 15.0 && r.rect.center().x > page.center().x)
-    ));
+    assert!(
+        h.output().shapes.iter().any(
+            |s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == color("Heading1") && r.rect.width() > 15.0 && r.rect.left() > page.right())
+        )
+    );
 }
