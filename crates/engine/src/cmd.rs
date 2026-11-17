@@ -18,6 +18,7 @@ pub mod find_pattern;
 pub mod fmt_revisions;
 pub mod font;
 pub mod format;
+pub mod helix;
 pub mod index;
 pub mod ink_shape;
 pub mod insert;
@@ -64,6 +65,7 @@ pub fn registry() -> Registry {
     let mut v = Vec::new();
     v.extend(text::specs());
     v.extend(caret::specs());
+    v.extend(helix::specs());
     v.extend(column::specs());
     v.extend(edit::specs());
     v.extend(paste::specs());

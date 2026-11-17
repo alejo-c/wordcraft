@@ -1,5 +1,21 @@
 # Control protocol
 
+Status: 2026-11-17. Added optional Helix editing controls.
+
+## Helix controls
+
+- engine.execute with command ui.helix and params value true or false enables or disables Helix editing. Omitting value queries it.
+- engine.execute with command ui.helixMode and params mode normal, insert or select changes mode. Omitting mode queries it.
+- Both controls return enabled and mode. ui.helix is allowed without an open document; ui.helixMode requires one.
+- Native input still goes through ui.key and ui.text. Character-find and replacement prefixes take their target from ui.text.
+- Registered engine commands: caret.helix, select.helixCursor, select.helixLine, select.helixFind, select.helixFlip, select.helixObject and text.helixReplace. Inspect their registry parameter descriptions before invoking them.
+
+## Helix revision history
+
+- 2026-11-17: Added mode controls and command references for modal editing.
+
+## Protocol overview
+
 > **Last updated:** 2026-11-09 · #6146: scroll speed preferences (`ui.scrollSpeed`, `ui.touchpadScrollSpeed`); #6159: refuse ui.screenshot on secondary document windows and support root window selection with view.switchWindows.
 
 Start the app with a control port: `wordcraft --control 7981` (or `WORDCRAFT_CONTROL_PORT=7981`).

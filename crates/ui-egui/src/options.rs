@@ -678,6 +678,10 @@ fn advanced(app: &mut WordApp, ui: &mut Ui) {
     scroll_speed_picker(app, ui);
     ui.add_space(8.0);
     section(ui, "Customize");
+    let mut helix = app.ui.helix_editing;
+    if ui.checkbox(&mut helix, tl!("Helix modal editing")).changed() {
+        let _ = app.run("ui.helix", json!({"value": helix}));
+    }
     ui.horizontal(|ui| {
         ui.label(tl!("Keyboard shortcuts:"));
         if ui.button(tl!("Customize…")).clicked() {

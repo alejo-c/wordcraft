@@ -1,5 +1,7 @@
 # WordCraft roadmap: milestones and what's next
 
+Status: 2026-11-17. Helix modal editing implemented; native/browser acceptance and the existing full quality gate remain open.
+
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-03 · **Change:** minor (#3693: additional Delete Previous Sentence command and shortcut; Word-parity estimates unchanged); previously minor (M15: Arabic mirrored UI #1195; 28 UI languages; Hebrew UI and native IME acceptance remain open); previously trivial (HTML import keeps preformatted lines with CR, CRLF or LF input newlines (#4810); numeric character references retain their separate meaning; readiness estimates unchanged; previously trivial: egui 0.37 migration: 27 interface languages remain pinned by `craft-i18n.rev` (9205108…), and the input-method handling has synthetic regressions while managed CI passed and native acceptance (#155–#164) remains open; previously trivial: M6: Manage Sources imports Word's `Sources.xml`, #2640; previously minor: Czech proofing review fixes; previously minor: Portuguese proofing; previously minor: Polish interface and Polish proofing; previously trivial: M7: formatting revisions landed, #41; previously trivial: M5: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: alpha gate checked: six core workflows pass; previously major: milestones moved here from ROADMAP.md; Current focus set from the re-measured gaps) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
 Forward-looking plan. The summary is [`ROADMAP.md`](../ROADMAP.md); the ranked work list is
@@ -24,6 +26,11 @@ Opus 5.5 agent wall-clock.
    options, a local page-by-page comparison harness; an owner decision on an Aptos-metric font.
 6. **Formatting revisions and content controls** (gap #5, 12–18 h), **native printing** (gap #6,
    6–10 h), **dialog depth** (gap #7, 20–30 h).
+
+## Helix modal editing validation
+
+- Verify the optional editing mode interactively on the desktop and web after automated checks.
+- Re-run the full quality gate once main's existing layout, proofing and ODT test failures are resolved.
 
 ## Alpha gate (core workflows)
 

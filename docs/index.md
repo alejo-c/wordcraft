@@ -7,8 +7,8 @@
 
 ## File index
 
-- architecture.md: workspace layers and data flow.
+- architecture.md: workspace layers, data flow and Helix modal editing symbols.
 - spotlight.md: native paragraph-style badges, Styles pane color indicators and spotlight preferences.
 - TODO.md: pending work and verification commands.
 - PROGRESS.md: completed work.
-- ../context/structure.md: workspace directories and spotlight files.
+- ../context/structure.md: workspace directories, spotlight and Helix files.

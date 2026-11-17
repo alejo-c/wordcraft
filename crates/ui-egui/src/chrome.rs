@@ -753,6 +753,12 @@ pub fn status_bar(app: &mut WordApp, ui: &mut Ui) {
                         resp
                     };
                     let st = |ui: &mut Ui, s: &str| st_icon(ui, None, s);
+                    if app.ui.helix_editing {
+                        let mode = crate::keys::helix::status(app);
+                        if st(ui, &mode).on_hover_text(tl!("Helix modal editing")).clicked() {
+                            let _ = app.run("ui.helixMode", json!({"mode": "normal"}));
+                        }
+                    }
                     if st(ui, &crate::i18n::fmt(tl!("Page {page} of {pages}"), &[("page", &page.to_string()), ("pages", &l.pages.len().to_string())]))
                         .on_hover_text(tl!("Go To (⌘⌥G)"))
                         .clicked()

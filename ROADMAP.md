@@ -1,5 +1,7 @@
 # WordCraft roadmap
 
+Status: 2026-11-17. Added optional Helix modal editing; native and browser acceptance remains pending. Word parity estimates unchanged.
+
 Spotlight status, 2026-11-13: native paragraph-style margin blocks and matching Styles pane indicators; see docs/spotlight.md.
 
 > **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-12 · **Change:** minor (added layout.fitOnePage and its Layout › Page Setup ribbon button to condense a multi-page document by one page while preserving typography hierarchy); previously minor (#3398: persistent screen paper colors; parity estimates unchanged); previously minor (#3693: additional Delete Previous Sentence command and shortcut; Word-parity estimates unchanged)
@@ -153,6 +155,7 @@ Ranked, to beta (detail and remaining milestones in [docs/roadmap.md](docs/roadm
 
 ## Progress log
 
+- 2026-11-17: Helix modal editing adds movement, selection-first edits, rich-text yanking, insertion repeat and persistent preferences.
 - 2026-11-13: Added native paragraph style spotlight blocks and matching Styles pane indicators with persistent visibility.
 
  fix/6146-touchpad-scroll-speed
@@ -898,6 +901,7 @@ MATH glyphs that reference the same construction now share its immutable variant
 
 ## Revision history
 
+- 2026-11-17: Merged Helix modal editing into custom alongside Spotlight. Readiness estimates unchanged.
 - 2026-11-13: Spotlight native UI integration. Readiness estimates unchanged.
 
 > 2026-11-08 · Progress log: `convert --strict` refuses a PDF or PNG that would silently lack a character or a picture (#6005).

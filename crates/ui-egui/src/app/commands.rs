@@ -531,6 +531,7 @@ impl WordApp {
                 }
                 json!({"spotlight": self.ui.spotlight})
             }
+            "ui.helix" | "ui.helixMode" => return Some(crate::keys::helix::command(self, id, p)),
             "ui.checkForUpdates" | "help.checkForUpdates" => {
                 crate::updates_ui::check(self);
                 Value::Null
@@ -1161,6 +1162,7 @@ pub(crate) fn works_without_document(id: &str) -> bool {
             | "ui.makeDefaultApp"
             | "ui.discord"
             | "ui.caretAnimation"
+            | "ui.helix"
             | "ui.startScreen"
             | "ui.recentRemove"
             | "ui.recentClear"

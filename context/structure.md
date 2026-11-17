@@ -8,6 +8,8 @@
 - crates/docbin: binary Word import.
 - crates/docx: DOCX import and export.
 - crates/engine: editing session and commands.
+- crates/engine/src/cmd/helix.rs: modal selection and movement commands.
+- crates/engine/src/cmd/helix/tests.rs: modal engine command regressions.
 - crates/fonts: fonts and shaping.
 - crates/formats: other document formats.
 - crates/geom: geometry and units.
@@ -17,6 +19,8 @@
 - crates/pdf: PDF export.
 - crates/render: page rasterization.
 - crates/ui-egui: native editor interface.
+- crates/ui-egui/src/keys/helix.rs: optional modal keyboard adapter and per-window state.
+- crates/ui-egui/src/keys/helix/tests.rs: modal keyboard and focus regressions.
 - crates/ui-egui/src/spotlight.rs: paragraph blocks, labels and shared style color indicators.
 - crates/ui-egui/src/spotlight/tests.rs: spotlight regression and headless interaction tests.
 - crates/ui-egui/src/canvas.rs: spotlight painting in the existing page view.

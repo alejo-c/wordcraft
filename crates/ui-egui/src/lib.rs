@@ -395,6 +395,7 @@ pub struct UiState {
     pub caret_animation: bool,
     /// Custom keyboard shortcuts (Customize Keyboard, #368); the session owns them while running.
     pub keyboard: wordcraft_engine::KeyMap,
+    pub helix_editing: bool,
     /// Custom ribbon tabs and groups, hidden tabs and the Quick Access Toolbar (Customize Ribbon,
     /// #379); the session owns them while running.
     pub ribbon: wordcraft_engine::RibbonLayout,
@@ -507,6 +508,7 @@ impl Default for UiState {
             check_spelling: true,
             caret_animation: true,
             keyboard: wordcraft_engine::KeyMap::default(),
+            helix_editing: false,
             ribbon: wordcraft_engine::RibbonLayout::default(),
             caption_labels: Vec::new(),
             last_caption_label: String::new(),

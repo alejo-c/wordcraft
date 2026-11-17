@@ -105,6 +105,8 @@ Spotlight belongs in the native canvas and Styles pane. Use the shown preview do
 Before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). Commit after every arc of work that builds, with a task id in the message (`M2.1: line spacing dialog`).
 
 ## Typing behaves like Word
+Helix printable bindings use committed Text or IME input when egui also supplies a Key event; Key alone is a fallback for synthetic input. Preserve this ordering for Caps Lock and keyboard layouts, and test paired and split Key/Text events. Modal selections must not open the floating formatting toolbar on every movement.
+
 Typing, Enter, Backspace, Tab, lists, AutoCorrect and AutoFormat follow Word's observed behaviour in [`docs/typing-parity.md`](docs/typing-parity.md), pinned by `crates/engine/src/tests/typing.rs` (keys go through the same commands as the keyboard). Change behaviour, doc and tests together; a typing fix lands with a test there. Compare headlessly (`ui_shot`); don't drive GUIs with keystrokes on the shared machine.
 
 ## Running and looking at the app
