@@ -1064,6 +1064,7 @@ struct PagePaint<'a> {
     view: u64,
     /// The view without the hinting, which a stretched raster may differ in (see `stretched`).
     shown_view: u64,
+    relative_line_origin: Option<u32>,
     zooming: bool,
     hinted: bool,
     content_origin: Pos2,
@@ -1155,6 +1156,7 @@ fn paint_pages(pass: PagePaint<'_>) -> PagePaintOutput {
         hidden,
         view,
         shown_view,
+        relative_line_origin,
         zooming,
         hinted,
         content_origin,
@@ -1178,10 +1180,21 @@ fn paint_pages(pass: PagePaint<'_>) -> PagePaintOutput {
         // Hide White Space shows only a band of the page; everything below paints into it.
         let band_of = |r: Rect| Rect::from_min_max(pos2(r.min.x - 4.0, r.min.y + band_top), pos2(r.max.x + 4.0, r.min.y + band_bot));
         let visible = band_of(sr).intersects(ui.clip_rect().expand(200.0));
+        let relative_origin = relative_line_origin.filter(|_| !page.numbered_lines.is_empty());
+        let view_with_numbers = |view| {
+            let Some(origin) = relative_origin else { return view };
+            let mut h = std::collections::hash_map::DefaultHasher::new();
+            (view, origin).hash(&mut h);
+            h.finish()
+        };
+        let mut relative_page = None;
         // Only pages on screen or with a texture need their key (#811).
         let cached = !tiled && app.canvas.textures.contains_key(&i);
-        let key =
-            if visible || cached { page_key(app, layout, i, view, scale_px) ^ if tiled { (tile_height_px as u64) << 32 } else { 0 } } else { 0 };
+        let key = if visible || cached {
+            page_key(app, layout, i, view_with_numbers(view), scale_px) ^ if tiled { (tile_height_px as u64) << 32 } else { 0 }
+        } else {
+            0
+        };
         let mut fresh = cached && app.canvas.textures.get(&i).is_some_and(|(k, _, _)| *k == key);
         // The page a drag took an object off: render it this frame whatever the budget, or the
         // raster with the object still on it shows for a frame.
@@ -1193,7 +1206,7 @@ fn paint_pages(pass: PagePaint<'_>) -> PagePaintOutput {
         // screen): it is rendered once the zoom stops, or before stretching softens it too much.
         // Only a raster of what the page shows now: a zoom that reflows the pages (Read Mode's
         // text size, Web Layout's width) renders them anew.
-        let shows = if visible || cached { page_shows(app, layout, i, shown_view) } else { 0 };
+        let shows = if visible || cached { page_shows(app, layout, i, view_with_numbers(shown_view)) } else { 0 };
         let stretched = zooming
             && !forced
             && app.canvas.textures.get(&i).is_some_and(|(_, showed, tex)| *showed == shows && stretch_fits(tex.size()[0], page.w, scale_px));
@@ -1202,7 +1215,9 @@ fn paint_pages(pass: PagePaint<'_>) -> PagePaintOutput {
             opts.hinting &= hinted;
             // Only on the page it is on: the `Pos` can't match an object of another page.
             opts.display.hide_object = hidden.as_ref().filter(|(page, _)| *page == i).map(|(_, p)| p.clone());
-            let img = wordcraft_render::render_page(page_doc(app), page, scale_px, &opts);
+            let doc = page_doc(app);
+            let relative_page = relative_origin.map(|origin| page.with_relative_line_numbers(doc, origin));
+            let img = wordcraft_render::render_page(doc, relative_page.as_ref().unwrap_or(page), scale_px, &opts);
             let ci = page_image(&img);
             match app.canvas.textures.get_mut(&i) {
                 Some((k, showed, tex)) => {
@@ -1260,9 +1275,12 @@ fn paint_pages(pass: PagePaint<'_>) -> PagePaintOutput {
                     opts.display.hide_object = hidden.as_ref().filter(|(page, _)| *page == i).map(|(_, p)| p.clone());
                     // The tiny subtraction avoids a 1px overshoot from round-tripping f32
                     // pixels through page points and render_area's ceil() conversion.
+                    let doc = page_doc(app);
+                    let render_page =
+                        relative_origin.map_or(page, |origin| relative_page.get_or_insert_with(|| page.with_relative_line_numbers(doc, origin)));
                     let img = wordcraft_render::render_area(
-                        page_doc(app),
-                        page,
+                        doc,
+                        render_page,
                         wordcraft_geom::Rect::new(0.0, start_px as f32 / scale_px, page.w, (height_px as f32 - 0.01).max(0.01) / scale_px),
                         scale_px,
                         &opts,
@@ -1707,6 +1725,9 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
         let page_view = view_key(app, dim_body, hidden.as_ref().map(|(_, p)| p), hinted);
         // The view without the hinting, which a stretched raster may differ in (see `stretched`).
         let shown_view = view_key(app, dim_body, hidden.as_ref().map(|(_, p)| p), true);
+        let focused = resp.has_focus() || app.canvas.focused;
+        let window_focused = focused && ui.input(|i| i.focused);
+        let relative_line_origin = cursor::relative_line_origin(app, &layout, window_focused);
         let t0 = crate::now_ms();
         let PagePaintOutput { rects, visible_tile_keys, rendered } = paint_pages(PagePaint {
             app,
@@ -1720,6 +1741,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             hidden,
             view: page_view,
             shown_view,
+            relative_line_origin,
             zooming,
             hinted,
             content_origin,
@@ -1728,8 +1750,7 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
             grid_story,
         });
         paint_white_space_seams(&painter, &rects, &geo, &t);
-        let focused = resp.has_focus() || app.canvas.focused;
-        cursor::paint_helix_lines(app, &painter, &layout, &rects, geo.scale, focused && ui.input(|i| i.focused), &t);
+        cursor::paint_helix_cursorline(app, &painter, &layout, &rects, geo.scale, window_focused, &t);
         if rendered > 0 {
             app.canvas.render_ms = crate::now_ms() - t0;
         }

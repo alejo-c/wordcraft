@@ -3,7 +3,19 @@ use super::pages::{page_render_options, page_screen_scale};
 use super::story::dims_body;
 use super::{Color32, DocLayout, Hash, Hasher, Pos, Pos2, WordApp};
 
-pub(super) fn paint_helix_lines(
+pub(super) fn relative_line_origin(app: &WordApp, layout: &DocLayout, focused: bool) -> Option<u32> {
+    if !focused
+        || !crate::keys::helix::block_caret(app)
+        || app.session.view.read_mode
+        || super::preview_sel(app).is_some()
+        || app.helix_config.as_ref().is_some_and(|config| config.absolute_line_numbers)
+    {
+        return None;
+    }
+    layout.line_number_at(&wordcraft_engine::cmd::helix::cursor(&app.session), app.session.page_hint)
+}
+
+pub(super) fn paint_helix_cursorline(
     app: &WordApp,
     painter: &egui::Painter,
     layout: &DocLayout,
@@ -12,65 +24,28 @@ pub(super) fn paint_helix_lines(
     focused: bool,
     tokens: &crate::theme::Tokens,
 ) {
-    if !app.ui.helix_editing || app.session.view.read_mode || super::preview_sel(app).is_some() {
+    if !focused
+        || !app.ui.helix_editing
+        || app.session.view.read_mode
+        || super::preview_sel(app).is_some()
+        || !app.helix_config.as_ref().is_some_and(|config| config.cursorline)
+    {
         return;
     }
-    let modal = crate::keys::helix::block_caret(app);
-    let pos = if modal { wordcraft_engine::cmd::helix::cursor(&app.session) } else { app.session.sel.focus.clone() };
-    let caret = layout.caret_on(&pos, app.session.page_hint);
-    let settings = app.helix_config.as_ref();
-    let relative = focused && modal && !settings.is_some_and(|config| config.absolute_line_numbers);
-    let highlight = focused && settings.is_some_and(|config| config.cursorline);
-    let clip = painter.clip_rect();
-    let color = caret_contrast(page_render_options(app, false).paper_of(&app.session.doc));
-    let Some(last_visible) = rects.iter().rposition(|rect| rect.intersects(clip)) else { return };
-    let last_page = caret.filter(|_| relative).map_or(last_visible, |c| last_visible.max(c.page));
-    let mut visible = Vec::new();
-    let mut number = 0usize;
-    let mut active = None;
-    for (pi, (page, rect)) in layout.pages.iter().zip(rects).enumerate().take(last_page.saturating_add(1)) {
-        let scale = page_screen_scale(*rect, page, scale);
-        let on_screen = rect.intersects(clip);
-        let lines = wordcraft_layout::hit::page_lines(page, pos.story);
-        let active_line = caret
-            .filter(|c| c.page == pi && c.width == 0.0)
-            .and_then(|_| lines.iter().find(|line| line.path == &pos.path))
-            .map(|line| line.para.line_of(pos.off));
-        for line in lines {
-            let Some(row) = line.para.lines.get(line.li) else { continue };
-            if !row.beside || number == 0 {
-                number += 1;
-            }
-            let is_active = active_line == Some(line.li) && line.path == &pos.path;
-            if is_active {
-                active = Some(number);
-            }
-            if !on_screen || (row.beside && !is_active) {
-                continue;
-            }
-            let band = egui::Rect::from_min_max(
-                egui::pos2(rect.left() + line.left * scale, rect.top() + line.top * scale),
-                egui::pos2(rect.left() + line.right * scale, rect.top() + line.bottom * scale),
-            );
-            if band.intersects(clip) {
-                if is_active && highlight {
-                    painter.rect_filled(band, 0.0, tokens.accent.gamma_multiply(0.13));
-                }
-                if !row.beside {
-                    visible.push((number, band.left_center(), band.height().min(10.0)));
-                }
-            }
-        }
+    let pos = if crate::keys::helix::block_caret(app) { wordcraft_engine::cmd::helix::cursor(&app.session) } else { app.session.sel.focus.clone() };
+    let Some(caret) = layout.caret_on(&pos, app.session.page_hint).filter(|c| c.width == 0.0) else { return };
+    let (Some(page), Some(rect)) = (layout.pages.get(caret.page), rects.get(caret.page)) else { return };
+    if !rect.intersects(painter.clip_rect()) {
+        return;
     }
-    for (number, at, size) in visible {
-        let label = active.filter(|&current| relative && current != number).map_or(number, |current| current.abs_diff(number));
-        painter.text(
-            at - egui::vec2(8.0, 0.0),
-            egui::Align2::RIGHT_CENTER,
-            label.to_string(),
-            egui::FontId::monospace(size),
-            color.gamma_multiply(if active == Some(number) { 0.85 } else { 0.55 }),
+    let scale = page_screen_scale(*rect, page, scale);
+    let lines = wordcraft_layout::hit::page_lines(page, pos.story);
+    if let Some(line) = lines.iter().find(|line| line.path == &pos.path && line.li == line.para.line_of(pos.off)) {
+        let band = egui::Rect::from_min_max(
+            egui::pos2(rect.left() + line.left * scale, rect.top() + line.top * scale),
+            egui::pos2(rect.left() + line.right * scale, rect.top() + line.bottom * scale),
         );
+        painter.rect_filled(band, 0.0, tokens.accent.gamma_multiply(0.13));
     }
 }
 

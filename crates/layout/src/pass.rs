@@ -216,6 +216,7 @@ fn new_page_builder<'p>(
         excl: Vec::new(),
         float_tables: Vec::new(),
         line_no: 0,
+        line_ordinal: 0,
         page_items_start: 0,
         block_marks: Vec::new(),
         page_valign: wordcraft_doc::section::PageVAlign::Top,
@@ -517,7 +518,9 @@ fn index_lines(pages: &[Page]) -> HashMap<(StoryRef, Path), Vec<(usize, usize)>>
     let mut index: HashMap<(StoryRef, Path), Vec<(usize, usize)>> = HashMap::new();
     for (pi, p) in pages.iter().enumerate() {
         for (ii, it) in p.items.iter().enumerate() {
-            if let Placed::Lines { story, path, .. } = it {
+            if let Placed::Lines { story, path, .. } = it
+                && !(*story == crate::DECOR_STORY && matches!(path.0.as_slice(), [super::flow::LINE_NUMBER_PATH, _]))
+            {
                 index.entry((*story, path.clone())).or_default().push((pi, ii));
             }
         }
@@ -634,6 +637,7 @@ struct Snap<'a> {
     pb: PageBuilder<'a>,
     pages: usize,
     items: usize,
+    numbered_lines: usize,
     behind: usize,
     counters: Counters,
     eq_count: u32,
@@ -652,6 +656,7 @@ impl<'a> Snap<'a> {
             pb: copy,
             pages: pb.pages.len(),
             items: pb.pages.last().map_or(0, |p| p.items.len()),
+            numbered_lines: pb.pages.last().map_or(0, |p| p.numbered_lines.len()),
             behind: pb.behind.last().copied().unwrap_or(0),
             counters: ctx.counters.clone(),
             eq_count: ctx.eq_count,
@@ -671,6 +676,7 @@ impl<'a> Snap<'a> {
             let k = behind.last().copied().unwrap_or(0).saturating_sub(self.behind).min(pg.items.len());
             pg.items.drain(..k);
             pg.items.truncate(self.items);
+            pg.numbered_lines.truncate(self.numbered_lines);
         }
         if let Some(b) = behind.last_mut() {
             *b = self.behind;

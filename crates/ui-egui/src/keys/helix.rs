@@ -447,6 +447,13 @@ fn key_text(key: Key, shift: bool) -> Option<String> {
 
 fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<bool, String> {
     let printable = !m.ctrl && !m.alt && !m.mac_cmd && !m.command && config::printable_key(key, m.shift).is_some();
+    if app.canvas.helix.mode == Mode::Insert && !printable && !(key == Key::Escape && m.is_none()) {
+        bindings::flush_prefix(app)?;
+        if !(m.ctrl || m.alt || m.mac_cmd || m.command) && matches!(key, Key::Backspace | Key::Delete | Key::Enter | Key::Tab) {
+            join_insert(app);
+        }
+        return Ok(false);
+    }
     if !(printable && text_follows)
         && let Some(name) = config::event_key(key, m)
         && bindings::custom(app, &name)?
@@ -469,33 +476,22 @@ fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<
     if matches!(app.canvas.helix.pending, Some(Pending::View)) && !printable {
         return character(app, "").map(|()| true);
     }
-    if m.ctrl && !m.alt && !m.shift {
-        let id = if app.canvas.helix.mode == Mode::Insert {
-            match key {
-                Key::W => "text.deleteWordBack",
-                Key::H => "text.backspace",
-                Key::D => "text.delete",
-                Key::J => "text.newParagraph",
-                _ => return Ok(false),
-            }
-        } else {
-            match key {
-                Key::B => return motion(app, "pageUp").map(|()| true),
-                Key::F => return motion(app, "pageDown").map(|()| true),
-                Key::U => return motion(app, "halfPageUp").map(|()| true),
-                Key::D => return motion(app, "halfPageDown").map(|()| true),
-                _ => return Ok(false),
-            }
-        };
-        join_insert(app);
-        app.run(id, json!({}))?;
-        return Ok(true);
-    }
     if app.canvas.helix.mode == Mode::Insert {
-        if matches!(key, Key::Backspace | Key::Delete | Key::Enter | Key::Tab) {
-            join_insert(app);
-        }
         return Ok(false);
+    }
+    if m.ctrl && !m.alt && !m.shift {
+        if app.canvas.helix.mode != Mode::Normal {
+            return Ok(false);
+        }
+        let name = match key {
+            Key::B => "pageUp",
+            Key::F => "pageDown",
+            Key::U => "halfPageUp",
+            Key::D => "halfPageDown",
+            Key::E | Key::Y => return bindings::scroll(app, key == Key::Y).map(|()| true),
+            _ => return Ok(false),
+        };
+        return motion(app, name).map(|()| true);
     }
     if m.alt {
         match key {

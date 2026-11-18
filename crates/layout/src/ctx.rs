@@ -181,6 +181,41 @@ pub(crate) fn picture_outline(
     outline
 }
 
+pub(crate) fn line_number_para(doc: &Document, numeral: crate::NumeralMode, n: u32) -> Arc<ParaLayout> {
+    let fields = FieldCtx::default();
+    // Word formats line numbers with the "Line Number" character style over the document's
+    // defaults (measured in Word for Mac: Aptos 12 pt black in a document whose defaults are
+    // Aptos 12 pt), not in a fixed small grey.
+    let styles = &doc.styles;
+    let style = styles
+        .get(LINE_NUMBER_STYLE)
+        .or_else(|| styles.find(LINE_NUMBER_STYLE_NAME).filter(|s| s.kind == wordcraft_doc::StyleKind::Character))
+        .map(|s| s.id.clone());
+    let mut p = Paragraph::with_text(&n.to_string(), CharProps { style, ..Default::default() });
+    p.props.space_after = Some(0.0);
+    p.props.space_before = Some(0.0);
+    let env = para::ParaEnv {
+        doc,
+        width: 60.0,
+        label: None,
+        fields: &fields,
+        show_hidden: false,
+        field_codes: false,
+        hide_deleted: Default::default(),
+        table: None,
+        proofing: None,
+        typing_word: None,
+        numeral,
+        exclusions: &[],
+        eq_number: 0,
+        read_line_spacing: None,
+        grid: para::Grid::default(),
+        fit_objects: false,
+        fitted: &[],
+    };
+    Arc::new(para::layout_para(&p, &env))
+}
+
 impl Ctx<'_> {
     /// The outline Tight and Through wrapping follow around `o` (see [`contour::wrap_outline`]);
     /// pictures' are worked out once per picture and crop.
@@ -198,37 +233,7 @@ impl Ctx<'_> {
         if let Some(p) = self.numbers.get(&n) {
             return p.clone();
         }
-        // Word formats line numbers with the "Line Number" character style over the document's
-        // defaults (measured in Word for Mac: Aptos 12 pt black in a document whose defaults are
-        // Aptos 12 pt), not in a fixed small grey.
-        let styles = &self.doc.styles;
-        let style = styles
-            .get(LINE_NUMBER_STYLE)
-            .or_else(|| styles.find(LINE_NUMBER_STYLE_NAME).filter(|s| s.kind == wordcraft_doc::StyleKind::Character))
-            .map(|s| s.id.clone());
-        let mut p = Paragraph::with_text(&n.to_string(), CharProps { style, ..Default::default() });
-        p.props.space_after = Some(0.0);
-        p.props.space_before = Some(0.0);
-        let env = para::ParaEnv {
-            doc: self.doc,
-            width: 60.0,
-            label: None,
-            fields: &self.fields,
-            show_hidden: false,
-            field_codes: false,
-            hide_deleted: Default::default(),
-            table: None,
-            proofing: None,
-            typing_word: None,
-            numeral: self.opts.numeral,
-            exclusions: &[],
-            eq_number: 0,
-            read_line_spacing: None,
-            grid: para::Grid::default(),
-            fit_objects: false,
-            fitted: &[],
-        };
-        let pl = Arc::new(para::layout_para(&p, &env));
+        let pl = line_number_para(self.doc, self.opts.numeral, n);
         self.numbers.insert(n, pl.clone());
         pl
     }

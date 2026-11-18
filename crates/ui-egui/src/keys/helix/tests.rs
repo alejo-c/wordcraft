@@ -132,7 +132,7 @@ fn insert_jk_sequence_and_failed_prefix_preserve_typed_text_and_undo() {
 }
 
 #[test]
-fn insert_arrow_noop_and_committed_case_and_punctuation_are_respected() {
+fn insert_arrows_stay_native_and_normal_keys_use_committed_text() {
     let mut a = configured("abcd", "[keys.normal]\nL = 'move_char_right'\n'*' = 'move_char_right'\n[keys.insert]\nleft = 'no_op'");
     frame(&mut a, vec![press(Key::L, Modifiers::NONE), Event::Text("L".into())]);
     assert_eq!(a.session.selected_text(), "b");
@@ -141,7 +141,7 @@ fn insert_arrow_noop_and_committed_case_and_punctuation_are_respected() {
     text(&mut a, "i");
     frame(&mut a, vec![press(Key::ArrowLeft, Modifiers::NONE)]);
     text(&mut a, "Z");
-    assert_eq!(body(&a), "abZcd");
+    assert_eq!(body(&a), "aZbcd");
 }
 
 #[test]
@@ -199,6 +199,32 @@ fn custom_scroll_bindings_preserve_selection_and_accumulate_counts() {
     assert_eq!(a.canvas.scroll_request.unwrap().y, 0.0);
     assert_eq!(a.session.sel, selection);
     assert!(!a.canvas.scroll_to_caret);
+}
+
+#[test]
+fn normal_control_keys_page_and_scroll() {
+    let mut a = app(&"Paragraph text.\n".repeat(100));
+    let before = a.session.sel.clone();
+    frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
+    assert!(a.canvas.scroll_request.take().unwrap().y > 0.0);
+    assert_eq!(a.session.sel, before);
+    frame(&mut a, vec![press(Key::F, Modifiers::CTRL)]);
+    assert!(a.session.sel.focus.path > before.focus.path);
+    assert!(!a.session.view.nav_pane);
+}
+
+#[test]
+fn insert_shortcuts_use_wordcraft_even_with_conflicting_helix_bindings() {
+    let mut a = configured("one two three", "[keys.insert]\nC-e = 'scroll_down'\nC-f = 'page_down'");
+    text(&mut a, "i");
+    let native = Modifiers::COMMAND | if cfg!(target_os = "macos") { Modifiers::MAC_CMD } else { Modifiers::CTRL };
+    frame(&mut a, vec![press(Key::E, native)]);
+    let p = a.session.doc.para_at(&a.session.sel.focus).unwrap();
+    assert_eq!(p.props.align, Some(wordcraft_doc::props::Align::Center));
+    assert!(a.canvas.scroll_request.is_none());
+    frame(&mut a, vec![press(Key::F, native)]);
+    assert!(a.session.view.nav_pane);
+    assert_eq!(a.canvas.helix.mode, Mode::Insert);
 }
 
 #[test]

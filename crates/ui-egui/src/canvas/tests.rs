@@ -1178,37 +1178,44 @@ fn helix_line_feedback_follows_focus_and_mode() {
     app.run("ui.helix", json!({"value": true})).unwrap();
     app.run("caret.set", json!({"pos": Pos::body(1, 0)})).unwrap();
     let layout = app.session.layout();
+    assert_eq!(cursor::relative_line_origin(&app, &layout, true), None);
+    app.run("layout.lineNumbers", json!({"value": "continuous"})).unwrap();
+
+    let layout = app.session.layout();
     let page = &layout.pages[0];
     let rect = Rect::from_min_size(Pos2::ZERO, vec2(page.w, page.h));
     let ctx = egui::Context::default();
-    let paint = |app: &WordApp, focused| {
+    let shaded = |app: &WordApp, focused| {
         let tokens = Tokens::get(&ctx);
         let mut output = ctx.run_ui(egui::RawInput { screen_rect: Some(rect), ..Default::default() }, |ui| {
-            cursor::paint_helix_lines(app, &ui.painter_at(rect), &layout, &[rect], 1.0, focused, &tokens);
+            cursor::paint_helix_cursorline(app, &ui.painter_at(rect), &layout, &[rect], 1.0, focused, &tokens);
         });
         output.textures_delta.clear();
-        let labels: Vec<_> = output
-            .shapes
+        output.shapes.iter().any(|item| matches!(&item.shape, egui::Shape::Rect(shape) if shape.fill == tokens.accent.gamma_multiply(0.13)))
+    };
+    let origin = cursor::relative_line_origin(&app, &layout, true).unwrap();
+    let relative = page.with_relative_line_numbers(&app.session.doc, origin);
+    let labels = |page: &Page| {
+        page.items
             .iter()
-            .filter_map(|item| match &item.shape {
-                egui::Shape::Text(text) => Some(text.galley.text().to_owned()),
+            .filter_map(|item| match item {
+                Placed::Lines { story: wordcraft_layout::DECOR_STORY, para, .. } => Some(para.glyphs.iter().map(|g| g.gid).collect::<Vec<_>>()),
                 _ => None,
             })
-            .collect();
-        let shaded =
-            output.shapes.iter().any(|item| matches!(&item.shape, egui::Shape::Rect(shape) if shape.fill == tokens.accent.gamma_multiply(0.13)));
-        (labels, shaded)
+            .collect::<Vec<_>>()
     };
-    let (labels, shaded) = paint(&app, true);
-    assert_eq!(labels, ["1", "2", "1", "2"]);
-    assert!(shaded);
-    let (labels, shaded) = paint(&app, false);
-    assert_eq!(labels, ["1", "2", "3", "4"]);
-    assert!(!shaded);
+    let absolute = labels(page);
+    assert_eq!(absolute.len(), 4);
+    assert_eq!(labels(&relative), [&absolute[0], &absolute[1], &absolute[0], &absolute[1]].map(Vec::clone));
+    assert!(shaded(&app, true));
+    assert_eq!(cursor::relative_line_origin(&app, &layout, false), None);
+    assert!(!shaded(&app, false));
+    app.helix_config = Some("[editor]\ncursorline = true\nline-number = 'absolute'".parse().unwrap());
+    assert_eq!(cursor::relative_line_origin(&app, &layout, true), None);
+    app.helix_config = Some("[editor]\ncursorline = true".parse().unwrap());
     app.run("ui.helixMode", json!({"mode": "insert"})).unwrap();
-    let (labels, shaded) = paint(&app, true);
-    assert_eq!(labels, ["1", "2", "3", "4"]);
-    assert!(shaded);
+    assert_eq!(cursor::relative_line_origin(&app, &layout, true), None);
+    assert!(shaded(&app, true));
 }
 
 /// `viewed_page`: the caret's page while any of its line is on screen, else the window's top page.

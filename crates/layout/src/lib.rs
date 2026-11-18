@@ -323,6 +323,10 @@ pub struct Page {
     /// The top-level body tables placed on this page as floating tables (`w:tblpPr`): a click
     /// outside one doesn't land in its cells ([`DocLayout::hit`]).
     pub float_tables: Vec<Path>,
+    #[doc(hidden)]
+    pub numbered_lines: Vec<(u32, usize, u32)>,
+    #[doc(hidden)]
+    pub line_number_numeral: NumeralMode,
 }
 
 /// The whole layout.

@@ -1,5 +1,6 @@
 # WordCraft roadmap
 
+Status: 2026-11-18. Helix uses the existing document line numbering and restores native shortcuts in Insert mode.
 Status: 2026-11-17. Added Helix view alignment, modal caret rendering and line feedback; interactive acceptance remains pending.
 Spotlight status, 2026-11-17: native paragraph-style badges outside the page and matching Styles pane indicators; see docs/spotlight.md.
 
@@ -927,7 +928,11 @@ MATH glyphs that reference the same construction now share its immutable variant
 - 2026-11-17: Added native Helix configuration and custom binding support; Word readiness estimates unchanged.
 - 2026-11-17: Fixed modal v-release paste routing and removed Helix registers in favor of the system clipboard.
 - 2026-11-17: Added Helix vertical view alignment, block caret rendering, relative line numbers and optional current-line shading.
+<<<<<<< HEAD
 - 2026-11-13: Spotlight native UI integration. Readiness estimates unchanged.
+=======
+- 2026-11-18: Relative labels reuse Layout line numbering. Insert uses native WordCraft modifier shortcuts.
+>>>>>>> feat/helix-modal-editing
 
 > 2026-11-08 · Progress log: `convert --strict` refuses a PDF or PNG that would silently lack a character or a picture (#6005).
 >

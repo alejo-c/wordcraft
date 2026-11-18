@@ -31,8 +31,11 @@ pub(super) fn page_content_key(page: &Page) -> u64 {
         list.len().hash(&mut h);
         for it in list.iter() {
             match it {
-                Placed::Lines { para, l0, l1, x, y, turn, .. } => {
+                Placed::Lines { story, path, para, l0, l1, x, y, turn } => {
                     (std::sync::Arc::as_ptr(para) as usize, l0, l1, x.to_bits(), y.to_bits(), turn).hash(&mut h);
+                    if *story == wordcraft_layout::DECOR_STORY {
+                        path.hash(&mut h);
+                    }
                 }
                 Placed::Fill { rect, color } => format!("{rect:?}{color:?}").hash(&mut h),
                 Placed::Rule { x0, y0, x1, y1, border } => format!("{x0}{y0}{x1}{y1}{border:?}").hash(&mut h),
