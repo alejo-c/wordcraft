@@ -187,6 +187,18 @@ impl Windows {
         }
     }
 
+    /// The viewports the open windows draw in, the root's included.
+    pub(crate) fn viewport_ids(&self) -> Vec<ViewportId> {
+        let mut ids = vec![ViewportId::ROOT];
+        for w in &self.open {
+            let v = self.viewport(w.key);
+            if !ids.contains(&v) {
+                ids.push(v);
+            }
+        }
+        ids
+    }
+
     /// The title View › Window › Switch Windows gives the window, as the frame started.
     fn menu_title(&self, key: u64) -> Option<&str> {
         self.menu.title(self.get(key)?.id?)
@@ -854,6 +866,12 @@ impl WordApp {
     /// borrowed for the interface).
     pub(crate) fn other_windows(&self) -> impl Iterator<Item = &WindowUi> {
         self.windows.open.iter().filter_map(|w| w.ui.as_deref())
+    }
+
+    /// [`WordApp::other_windows`] with each window's key, for each window's composition face
+    /// ([`crate::theme::composition_family`]).
+    pub(crate) fn other_windows_by_key(&self) -> impl Iterator<Item = (u64, &WindowUi)> {
+        self.windows.open.iter().filter_map(|w| w.ui.as_deref().map(|ui| (w.key, ui)))
     }
 }
 
