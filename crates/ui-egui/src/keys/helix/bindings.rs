@@ -174,6 +174,23 @@ fn execute(app: &mut WordApp, commands: Vec<String>) -> Result<(), String> {
     Ok(())
 }
 
+pub(super) fn scroll(app: &mut WordApp, up: bool) -> Result<(), String> {
+    let count = take_count(app);
+    let pos = app.session.sel.focus.clone();
+    let layout = app.session.layout();
+    let height = layout
+        .caret_on(&pos, app.session.page_hint)
+        .map(|c| c.height.max(c.width))
+        .filter(|h| h.is_finite() && *h > 0.0)
+        .ok_or("Cannot determine the Helix scroll line height")?;
+    let step = height * app.canvas.scale * count as f32;
+    let mut target = app.canvas.scroll_request.unwrap_or(app.canvas.scroll_offset);
+    target.y = (target.y + if up { -step } else { step }).max(0.0);
+    app.canvas.scroll_request = Some(target);
+    app.canvas.scroll_to_caret = false;
+    Ok(())
+}
+
 fn run(app: &mut WordApp, action: Action) -> Result<(), String> {
     match action {
         Action::Motion(name, extend) => {
@@ -227,21 +244,7 @@ fn run(app: &mut WordApp, action: Action) -> Result<(), String> {
         Action::ClipboardPaste(before, replace) => clipboard_paste(app, before, replace, true)?,
         Action::Delete(change) => delete(app, change, false)?,
         Action::Align(align) => app.canvas.helix_align = Some(align),
-        Action::Scroll(up) => {
-            let count = take_count(app);
-            let pos = app.session.sel.focus.clone();
-            let layout = app.session.layout();
-            let height = layout
-                .caret_on(&pos, app.session.page_hint)
-                .map(|c| c.height.max(c.width))
-                .filter(|h| h.is_finite() && *h > 0.0)
-                .ok_or("Cannot determine the Helix scroll line height")?;
-            let step = height * app.canvas.scale * count as f32;
-            let mut target = app.canvas.scroll_request.unwrap_or(app.canvas.scroll_offset);
-            target.y = (target.y + if up { -step } else { step }).max(0.0);
-            app.canvas.scroll_request = Some(target);
-            app.canvas.scroll_to_caret = false;
-        }
+        Action::Scroll(up) => scroll(app, up)?,
         Action::Forward => {
             if app.session.sel.anchor > app.session.sel.focus {
                 app.run("select.helixFlip", json!({}))?;

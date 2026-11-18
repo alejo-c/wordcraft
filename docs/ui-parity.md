@@ -1,12 +1,12 @@
 # UI parity with Microsoft Word
 
-Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relative line numbers and optional active-line shading. Interactive acceptance remains pending.
+Status: 2026-11-18. Helix uses Layout line numbering and WordCraft shortcuts in Insert mode. Interactive acceptance remains pending.
 
 ## Helix modal editing
 
 - Enable Helix modal editing in File > Options > Advanced > Customize. The preference is saved between runs.
 - Native builds read XDG_CONFIG_HOME/helix/config.toml when Helix is first enabled, including a saved enabled preference. With an unset, empty or relative XDG_CONFIG_HOME, HOME/.config/helix/config.toml is used. The file is never changed. Restart to reload, or bind a key to :config-reload.
-- keys.normal, keys.insert and keys.select override supported bindings independently. Commands, command arrays, inline maps and nested tables are supported, including Insert-mode j = { k = "normal_mode" }. Unmatched Insert prefixes are replayed as typing. Existing default g and Space sequences remain available outside custom entries.
+- keys.normal, keys.insert and keys.select override supported bindings independently. Commands, command arrays, inline maps and nested tables are supported, including Insert-mode typing sequences such as j = { k = "normal_mode" }. Unmatched Insert prefixes are replayed as typing. Existing default g and Space sequences remain available outside custom entries.
 - Supported custom actions include character, visual-line, word, long-word, line-boundary, document and page movements; selection extension; modes; insertion, deletion, case, undo, redo, search, scroll and clipboard actions. :w and :q use the normal save and close flows. no_op disables a key.
 - Clipboard-provider none disables Helix copy/paste actions, including default y/d/c/p/P/R and their configured aliases. Native provider names use WordCraft's existing clipboard services and retain rich text where available. Custom command providers, terminal-only providers and unknown providers report unsupported; no process is launched.
 - Shell commands, macros, syntax-node commands, window commands and other unsupported action names report a status message when invoked. Command arrays are checked for unsupported names and unavailable clipboard providers before any action executes. Unrelated editor settings are ignored.
@@ -16,7 +16,8 @@ Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relati
 - h/j/k/l and arrow keys move by character or visual line. w/b/e and W/B/E move by word or whitespace-delimited word. Counts precede movements.
 - In Normal and Select, zt aligns the caret with the top, zz/zc/zm center it vertically, and zb aligns it with the bottom. The scroll range limits alignment at document boundaries. The caret and selection stay in place.
 - Normal and Select use a block caret, including after a click. Insert uses the text insertion bar.
-- Line numbers follow the rendered lines of the active story. In focused Normal and Select, the current line shows its absolute number and surrounding lines show their distance from it. Insert and an unfocused canvas show absolute numbers. Desktop users can set line-number = "absolute" under [editor] in their Helix config.
+- Enable numbers through Layout > Line Numbers. In focused Normal and Select, the current numbered line retains its absolute label and other labels show their distance from the caret. Insert, an unfocused canvas and a caret outside numbered text use absolute labels. Desktop users can set line-number = "absolute" under [editor].
+- DocLayout::line_number_at finds the caret's ordinal among lines eligible for native numbering. Page::with_relative_line_numbers replaces labels for the canvas, preserving their style, alignment and spacing. The document and export keep absolute numbering.
 - Set cursorline = true under [editor] in the desktop Helix config to shade the current visual line, including within a wrapped paragraph.
 - gg/ge go to document boundaries; gh/gl/gs go to line boundaries or the first nonblank character; a count before gg or G selects a paragraph by number.
 - f/F/t/T wait for a character and search across paragraphs. Alt+. repeats the last character motion.
@@ -25,7 +26,7 @@ Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relati
 - u/U undo and redo. Insert-mode changes share an undo checkpoint until Escape; . repeats the last recorded insertion.
 - x extends through paragraphs; X selects paragraph bounds. Semicolon collapses to the cursor; Alt+semicolon reverses the selection; percent selects the story.
 - miw/maw, mis/mas and mip/map select inner/around word, sentence or paragraph objects. Greater/less-than indent or outdent; tilde toggles case; grave accent lowercases.
-- PageUp/PageDown and Ctrl+b/f page; Ctrl+u/d move half a page. Insert mode also supports Ctrl+w/h/d/j for deletion and Enter.
+- PageUp/PageDown and Normal-mode Ctrl+B/F page. Normal-mode Ctrl+U/D move half a page and Ctrl+Y/E scroll by the line count. In Insert, WordCraft handles modifier shortcuts, including Find and Center Paragraph.
 - Slash opens Find; n/N navigate its matches; asterisk searches for the selection. Colon and Space question-mark open WordCraft command search.
 - Dialog and task-pane text fields retain ordinary text input. Standard editing preferences still apply in Insert mode.
 - The floating selection toolbar stays hidden during modal editing; right-click formatting controls remain available.
@@ -44,6 +45,7 @@ Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relati
 - 2026-11-17: Added XDG configuration loading, custom modal keymaps and native clipboard configuration without new crates or subprocesses.
 - 2026-11-17: Fixed stale paste modifiers on modal v releases and replaced the private Helix register with system clipboard commands.
 - 2026-11-17: Added canvas-only view alignment, modal caret rendering, line numbers and configurable active-line shading.
+- 2026-11-18: Reused Layout line numbering and routed Insert-mode modifier shortcuts to WordCraft.
 
 ## Word UI assessment
 

@@ -47,6 +47,7 @@ pub(crate) struct PageBuilder<'a> {
     pub(crate) float_tables: Vec<Rect>,
     /// Line numbering counter.
     pub(crate) line_no: u32,
+    pub(crate) line_ordinal: u32,
     /// Index of the first body item of the current page (vertical alignment shifts from here).
     pub(crate) page_items_start: usize,
     /// Where each top-level block after the first starts on the current page: its first item's

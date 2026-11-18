@@ -571,7 +571,7 @@ impl<'a> Flow<'a> {
         );
         self.late.drew();
         items.extend(front);
-        items.extend(line_numbers(ctx, pb, &self.pl, (l0, l1), y));
+        items.extend(line_numbers(ctx, pb, self.block as u32, &self.pl, (l0, l1), y));
         add_items(pb, behind, items);
         if let (Some(f), Some(l)) = (self.pl.lines.get(l0), self.pl.lines.get(l1 - 1)) {
             pb.y = y + (l.top + l.height - f.top);
@@ -777,9 +777,12 @@ fn add_notes(pb: &mut PageBuilder, mut new_notes: Vec<NoteBox>, notes: &[(usize,
     }
 }
 
+// The first component cannot name a paragraph in the decoration story.
+pub(crate) const LINE_NUMBER_PATH: u32 = u32::MAX;
+
 /// Line numbers for lines `l0..l1` of `pl` laid out from `y`, left of the column they are in:
 /// each column of a multi-column section gets its own (#6018), as in Word.
-fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, pl: &ParaLayout, (l0, l1): (usize, usize), y: f32) -> Vec<Placed> {
+fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, block: u32, pl: &ParaLayout, (l0, l1): (usize, usize), y: f32) -> Vec<Placed> {
     let mut items = Vec::new();
     if let Some(ln) = pb.sect.line_numbers.clone().filter(|_| !pb.web && pl.rp.style != "Header" && !pl.rp.suppress_line_numbers)
         && let Some(first) = pl.lines.get(l0)
@@ -787,6 +790,12 @@ fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, pl: &ParaLayout, (l0, l1): 
         for li in l0..l1 {
             let Some(line) = pl.lines.get(li).filter(|l| !l.beside) else { continue };
             pb.line_no = pb.line_no.saturating_add(1);
+            pb.line_ordinal = pb.line_ordinal.saturating_add(1);
+            let ordinal = pb.line_ordinal;
+            if let Some(page) = pb.page() {
+                page.numbered_lines.push((block, li, ordinal));
+                page.line_number_numeral = ctx.opts.numeral;
+            }
             let n = pb.line_no.saturating_add(ln.start.saturating_sub(1));
             if ln.count_by > 1 && !n.is_multiple_of(ln.count_by) {
                 continue;
@@ -797,7 +806,7 @@ fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, pl: &ParaLayout, (l0, l1): 
             let ly = y + (line.top - first.top) + (line.baseline - line.top) - num.lines.first().map(|l| l.baseline).unwrap_or(10.0);
             items.push(Placed::Lines {
                 story: DECOR_STORY,
-                path: Path(vec![]),
+                path: Path(vec![LINE_NUMBER_PATH, ordinal]),
                 para: num.clone(),
                 l0: 0,
                 l1: 1,
@@ -808,6 +817,47 @@ fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, pl: &ParaLayout, (l0, l1): 
         }
     }
     items
+}
+
+impl crate::DocLayout {
+    pub fn line_number_at(&self, pos: &wordcraft_doc::Pos, page_hint: usize) -> Option<u32> {
+        let (StoryRef::Body, &[block]) = (pos.story, pos.path.0.as_slice()) else { return None };
+        let caret = self.caret_on(pos, page_hint)?;
+        let page = self.pages.get(caret.page)?;
+        let line = page.items.iter().find_map(|item| match item {
+            Placed::Lines { story: StoryRef::Body, path, para, l0, l1, .. } if *path == pos.path => {
+                let line = para.line_of(pos.off);
+                if !(*l0..*l1).contains(&line) {
+                    return None;
+                }
+                (*l0..=line).rev().find(|&i| para.lines.get(i).is_some_and(|row| !row.beside))
+            }
+            _ => None,
+        })?;
+        page.numbered_lines.iter().find_map(|&(b, l, ordinal)| (b == block && l == line).then_some(ordinal))
+    }
+}
+
+impl Page {
+    pub fn with_relative_line_numbers(&self, doc: &Document, current: u32) -> Self {
+        let mut page = self.clone();
+        let mut numbers = HashMap::new();
+        for item in &mut page.items {
+            let Placed::Lines { story: DECOR_STORY, path, para, x, y, .. } = item else { continue };
+            let &[LINE_NUMBER_PATH, ordinal] = path.0.as_slice() else { continue };
+            if ordinal == current {
+                continue;
+            }
+            let n = ordinal.abs_diff(current);
+            let relative = numbers.entry(n).or_insert_with(|| super::ctx::line_number_para(doc, self.line_number_numeral, n));
+            if let (Some(old), Some(new)) = (para.lines.first(), relative.lines.first()) {
+                *x += old.xs.last().copied().unwrap_or(10.0) - new.xs.last().copied().unwrap_or(10.0);
+                *y += old.baseline - new.baseline;
+            }
+            *para = relative.clone();
+        }
+        page
+    }
 }
 
 /// Add a piece's items to the last page: those `behind` the text at the front, the rest at the end.

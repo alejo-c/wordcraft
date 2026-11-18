@@ -4247,6 +4247,41 @@ fn line_numbers_stand_beside_each_column() {
 }
 
 #[test]
+fn relative_line_numbers_span_restarts_and_count_unlabelled_lines() {
+    let mut d = Document::from_text(&"line\n".repeat(120));
+    d.last_section.line_numbers = Some(wordcraft_doc::section::LineNumbering { count_by: 2, ..Default::default() });
+    let layout = lay(&d);
+    let last_on_first = layout.pages[0].numbered_lines.last().unwrap();
+    let (block, _, current) = layout.pages[1].numbered_lines[0];
+    assert_eq!(current, last_on_first.2 + 1);
+    let origin = layout.line_number_at(&wordcraft_doc::Pos::body(block as usize, 0), 1).unwrap();
+    assert_eq!(origin, current);
+
+    let page = &layout.pages[1];
+    let relative = page.with_relative_line_numbers(&d, origin);
+    let labels = |p: &Page| {
+        p.items
+            .iter()
+            .filter_map(|item| match item {
+                Placed::Lines { story: DECOR_STORY, para, x, y, .. } => {
+                    let line = para.lines.first().unwrap();
+                    Some((para.glyphs.iter().map(|g| g.gid).collect::<Vec<_>>(), x + line.xs.last().unwrap(), y + line.baseline))
+                }
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    };
+    let before = labels(page);
+    let after = labels(&relative);
+    assert_eq!(after.len(), before.len());
+    assert_ne!(after[0].0, before[0].0);
+    assert!((after[0].1 - before[0].1).abs() < 0.01);
+    assert!((after[0].2 - before[0].2).abs() < 0.01);
+    let one = super::ctx::line_number_para(&d, Default::default(), 1);
+    assert_eq!(after[0].0, one.glyphs.iter().map(|g| g.gid).collect::<Vec<_>>());
+}
+
+#[test]
 fn line_numbers_borders_text_boxes() {
     crate::test_fonts();
     let mut d = Document::from_text("one\ntwo\nthree");
