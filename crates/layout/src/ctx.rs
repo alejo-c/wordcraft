@@ -11,6 +11,7 @@ use super::{
 /// Word; other languages localise the id (German `Zeilennummer`) but keep the built-in name.
 const LINE_NUMBER_STYLE: &str = "LineNumber";
 const LINE_NUMBER_STYLE_NAME: &str = "line number";
+pub(super) const LINE_NUMBER_WIDTH: f32 = 60.0;
 
 /// A layout pass: finished, or to be done again with the page totals it found, or with the
 /// floats placed above their anchors it found ([`EarlyFloats`]).
@@ -211,7 +212,7 @@ impl Ctx<'_> {
         p.props.space_before = Some(0.0);
         let env = para::ParaEnv {
             doc: self.doc,
-            width: 60.0,
+            width: LINE_NUMBER_WIDTH,
             label: None,
             fields: &self.fields,
             show_hidden: false,

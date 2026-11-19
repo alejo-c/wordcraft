@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use super::cache::{LayoutCache, Totals, env_hash, hash_of};
-use super::ctx::{Ctx, Pass, with_pct_base};
+use super::ctx::{Ctx, LINE_NUMBER_WIDTH, Pass, with_pct_base};
 use super::fields::{BOOKMARK_NOT_DEFINED, BookmarkPages};
 use super::floats::{EarlyFloats, WrapArea, early_covered, left_out_objects};
 use super::flow::{OutlinePass, place_outline_para, place_para};
@@ -551,7 +551,28 @@ pub(crate) fn layout_pass(
     let first_sect = sections.first().map_or(&default_sect, |(_, s)| *s);
     let web_sect = mode.reflow.then(|| reflow_sect(first_sect, opts));
     let sect_ref = web_sect.as_ref().unwrap_or(first_sect);
-    let mut pb = new_page_builder(sect_ref, first_sect.page_num_format, early, mode.web, !may_rewrap && !mode.reflow);
+    let web_sections: Vec<_> = if opts.view == ViewMode::Web {
+        let max_distance = (sect_ref.text_width() - LINE_NUMBER_WIDTH - 36.0).max(0.0);
+        let distance = |d: f32| (if d > 0.0 { d } else { 18.0 }).min(max_distance);
+        let gutter =
+            sections.iter().filter_map(|(_, s)| s.line_numbers.as_ref()).map(|ln| LINE_NUMBER_WIDTH + distance(ln.distance)).fold(0.0, f32::max);
+        sections
+            .iter()
+            .map(|(_, s)| {
+                let mut web = sect_ref.clone();
+                web.margin_left += gutter;
+                web.line_numbers = s.line_numbers.clone();
+                if let Some(ln) = &mut web.line_numbers {
+                    ln.distance = distance(ln.distance);
+                }
+                web
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let initial_sect = web_sections.first().unwrap_or(sect_ref);
+    let mut pb = new_page_builder(initial_sect, first_sect.page_num_format, early, mode.web, !may_rewrap && !mode.reflow);
     let mut endnotes = endnote_queue(&ctx);
     // Text boxes laid out in balancing attempts that were thrown away.
     let mut boxes_discarded = 0usize;
@@ -563,7 +584,7 @@ pub(crate) fn layout_pass(
         let turn = if mode.reflow { TextDirection::Horizontal } else { sect.text_direction };
         let sect: &SectionProps = match turned.get(si) {
             Some(Some(t)) => t,
-            _ if mode.reflow => sect_ref,
+            _ if mode.reflow => web_sections.get(si).unwrap_or(sect_ref),
             _ => sect,
         };
         let start = if si == 0 { SectionStart::NextPage } else { sect.start };
