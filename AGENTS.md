@@ -101,8 +101,9 @@ People trust WordCraft with their writing; a crash loses their work. **This outr
 - **Rust only** (no handwritten JS/TS). **Never break wasm** (`cargo xtask wasm`).
 
 ## Quality gates
-Spotlight integration and symbol map: docs/spotlight.md; documentation index: docs/index.md; workspace directories: context/structure.md.
+Spotlight documentation: docs/spotlight.md; symbol map: docs/map/index.md; workspace directories: docs/structure.md.
 Spotlight belongs in the native canvas and Styles pane. Use the shown preview document and page bands; never modify document formatting for badges.
+Full CI is memory and process heavy. If it fails on tests unrelated to the change, record the failures and finish targeted checks without rerunning full CI.
 
 Before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). Commit after every arc of work that builds, with a task id in the message (`M2.1: line spacing dialog`).
 

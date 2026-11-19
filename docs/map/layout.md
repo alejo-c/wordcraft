@@ -1,0 +1,35 @@
+# Layout line numbering
+
+- LINE_NUMBER_WIDTH, crates/layout/src/ctx.rs:14. Shared width for number layout and the Web Layout margin.
+  - Uses: none.
+  - Used by: Ctx::number_para, layout_pass.
+- line_number_para, crates/layout/src/ctx.rs:185. Shares styled number shaping between absolute and Helix relative labels.
+  - Uses: LINE_NUMBER_WIDTH, para::layout_para.
+  - Used by: Ctx::number_para, Page::with_relative_line_numbers.
+- Ctx::number_para, crates/layout/src/ctx.rs:233. Caches numbers using the document's Line Number character style.
+  - Uses: line_number_para.
+  - Used by: flow::line_numbers.
+- flow::line_numbers, crates/layout/src/flow.rs:791. Places enabled numbers beside eligible lines in Print and Web Layout, retaining Helix line ordinals.
+  - Uses: Ctx::number_para, PageBuilder::col_x, paragraph suppression and section numbering settings.
+  - Used by: Flow::emit.
+- layout_pass, crates/layout/src/pass.rs:536. Reserves a common Web Layout number margin and preserves each section's numbering settings.
+  - Uses: reflow_sect, LINE_NUMBER_WIDTH, section line numbering settings.
+  - Used by: layout.
+- relative_line_numbers_span_restarts_and_count_unlabelled_lines, crates/layout/src/tests.rs:4599. Covers Helix relative labels across page restarts and skipped count intervals.
+  - Uses: layout, Page::with_relative_line_numbers, DocLayout::line_number_at.
+  - Used by: cargo test -p wordcraft-layout.
+- web_layout_supports_relative_line_numbers, crates/layout/src/tests.rs:4634. Verifies Helix relative labels remain visible in Web Layout.
+  - Uses: layout, Page::with_relative_line_numbers, DocLayout::line_number_at.
+  - Used by: cargo test -p wordcraft-layout.
+- web_layout_line_numbers_are_visible_in_the_left_margin, crates/layout/src/tests.rs:4659. Covers margin visibility, formatting and narrow windows without changing document settings.
+  - Uses: layout, LayoutCache, LayoutOptions, Document.
+  - Used by: cargo test -p wordcraft-layout.
+- web_layout_line_number_toggle_reflows_wrapped_lines, crates/layout/src/tests.rs:4699. Covers wrapping, count intervals and toggling numbering with a reused cache.
+  - Uses: layout, LayoutCache, LayoutOptions, Document.
+  - Used by: cargo test -p wordcraft-layout.
+- web_layout_line_numbers_follow_sections_and_paragraph_suppression, crates/layout/src/tests.rs:4729. Covers section numbering, restarts and paragraph suppression.
+  - Uses: layout, LayoutCache, LayoutOptions, Document.
+  - Used by: cargo test -p wordcraft-layout.
+- line_numbers_stay_hidden_in_other_reflow_views, crates/layout/src/tests.rs:4759. Keeps Draft, Outline and Read views unchanged.
+  - Uses: layout, LayoutCache, LayoutOptions, Document.
+  - Used by: cargo test -p wordcraft-layout.

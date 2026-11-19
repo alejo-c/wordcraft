@@ -4631,6 +4631,142 @@ fn relative_line_numbers_span_restarts_and_count_unlabelled_lines() {
 }
 
 #[test]
+fn web_layout_supports_relative_line_numbers() {
+    let mut d = Document::from_text("one\ntwo\nthree");
+    d.last_section.line_numbers = Some(Default::default());
+    let opts = LayoutOptions { view: ViewMode::Web, ..Default::default() };
+    let layout = layout(&d, &mut LayoutCache::new(), &opts);
+    let current = layout.line_number_at(&Pos::body(1, 0), 0).unwrap();
+    assert_eq!(current, 2);
+    let relative = layout.pages[0].with_relative_line_numbers(&d, current);
+    let labels: Vec<_> = relative
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            Placed::Lines { story: DECOR_STORY, para, x, .. } => {
+                assert!(*x >= 0.0);
+                Some(para.glyphs.iter().map(|g| g.gid).collect::<Vec<_>>())
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(labels.len(), 3);
+    assert_eq!(labels[0], labels[2]);
+    assert_ne!(labels[0], labels[1]);
+}
+
+#[test]
+fn web_layout_line_numbers_are_visible_in_the_left_margin() {
+    use wordcraft_doc::section::LineNumbering;
+
+    let mut d = Document::from_text("one\ntwo\nthree");
+    d.last_section.line_numbers = Some(LineNumbering { start: 32767, distance: 36.0, ..Default::default() });
+    Arc::make_mut(&mut d.styles).upsert(wordcraft_doc::Style {
+        id: "LineNumber".into(),
+        name: "line number".into(),
+        kind: wordcraft_doc::StyleKind::Character,
+        chr: CharProps { size: Some(16.0), ..Default::default() },
+        ..Default::default()
+    });
+    let original = d.last_section.clone();
+    for width in [144.0, 800.0] {
+        let opts = LayoutOptions { view: ViewMode::Web, web_width: width, ..Default::default() };
+        let l = layout(&d, &mut LayoutCache::new(), &opts);
+        assert_eq!(l.pages.len(), 1);
+        let page = &l.pages[0];
+        assert_eq!(page.w, width);
+        let numbers: Vec<_> = page
+            .items
+            .iter()
+            .filter_map(|it| match it {
+                Placed::Lines { story, para, x, y, .. } if *story == DECOR_STORY => Some((para, *x, *y)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(numbers.len(), 3);
+        for (para, x, _) in &numbers {
+            assert_eq!(para.styles[0].size, 16.0);
+            let right = x + para.lines[0].xs.last().copied().unwrap();
+            assert!(*x >= 0.0, "line number clipped at {x}");
+            assert!(right < page.body.x, "line number overlaps body text");
+        }
+        assert!(page.body.w >= 36.0);
+    }
+    assert_eq!(d.last_section, original);
+}
+
+#[test]
+fn web_layout_line_number_toggle_reflows_wrapped_lines() {
+    use wordcraft_doc::section::LineNumbering;
+
+    let mut d = Document::from_text(&"A paragraph that wraps across the window. ".repeat(30));
+    let opts = LayoutOptions { view: ViewMode::Web, web_width: 400.0, ..Default::default() };
+    let mut cache = LayoutCache::new();
+    let before = layout(&d, &mut cache, &opts);
+    assert_eq!(before.pages[0].body.x, 18.0);
+    d.last_section.line_numbers = Some(LineNumbering { start: 5, count_by: 2, ..Default::default() });
+    let numbered = layout(&d, &mut cache, &opts);
+    let page = &numbered.pages[0];
+    let lines: usize = page
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Lines { story: StoryRef::Body, l0, l1, .. } => Some(l1 - l0),
+            _ => None,
+        })
+        .sum();
+    let numbers = page.items.iter().filter(|it| matches!(it, Placed::Lines { story, .. } if *story == DECOR_STORY)).count();
+    assert!(lines > 1);
+    assert_eq!(numbers, lines / 2);
+    assert!(page.body.w < before.pages[0].body.w);
+    d.last_section.line_numbers = None;
+    let after = layout(&d, &mut cache, &opts);
+    assert_eq!(after.pages[0].body, before.pages[0].body);
+    assert!(!after.pages[0].items.iter().any(|it| matches!(it, Placed::Lines { story, .. } if *story == DECOR_STORY)));
+}
+
+#[test]
+fn web_layout_line_numbers_follow_sections_and_paragraph_suppression() {
+    use wordcraft_doc::section::{LineNumberRestart, LineNumbering};
+
+    let mut d = Document::from_text("unnumbered\nfirst\nsuppressed\nsecond\nrestart");
+    let mut first = d.last_section.clone();
+    first.start = SectionStart::Continuous;
+    d.para_mut(StoryRef::Body, &Path(vec![0])).unwrap().section = Some(Box::new(first.clone()));
+    let numbered = LineNumbering { start: 10, restart: LineNumberRestart::Section, ..Default::default() };
+    first.line_numbers = Some(numbered.clone());
+    d.para_mut(StoryRef::Body, &Path(vec![3])).unwrap().section = Some(Box::new(first));
+    d.para_mut(StoryRef::Body, &Path(vec![2])).unwrap().props.suppress_line_numbers = Some(true);
+    d.last_section.line_numbers = Some(numbered);
+    let opts = LayoutOptions { view: ViewMode::Web, ..Default::default() };
+    let l = layout(&d, &mut LayoutCache::new(), &opts);
+    let numbers: Vec<_> = l.pages[0]
+        .items
+        .iter()
+        .filter_map(|it| match it {
+            Placed::Lines { story, para, .. } if *story == DECOR_STORY => Some(para),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(numbers.len(), 3);
+    assert_eq!(numbers[0].text_len, 2);
+    let glyphs = |p: &ParaLayout| p.glyphs.iter().map(|g| g.gid).collect::<Vec<_>>();
+    assert_eq!(glyphs(numbers[0]), glyphs(numbers[2]), "section numbering restarts");
+    assert_ne!(glyphs(numbers[0]), glyphs(numbers[1]), "unsuppressed lines advance numbering");
+}
+
+#[test]
+fn line_numbers_stay_hidden_in_other_reflow_views() {
+    let mut d = Document::from_text("one\ntwo\nthree");
+    d.last_section.line_numbers = Some(Default::default());
+    for view in [ViewMode::Draft, ViewMode::Outline, ViewMode::Read] {
+        let opts = LayoutOptions { view, ..Default::default() };
+        let l = layout(&d, &mut LayoutCache::new(), &opts);
+        assert!(!l.pages.iter().flat_map(|p| &p.items).any(|it| matches!(it, Placed::Lines { story, .. } if *story == DECOR_STORY)));
+    }
+}
+
+#[test]
 fn line_numbers_borders_text_boxes() {
     crate::test_fonts();
     let mut d = Document::from_text("one\ntwo\nthree");
