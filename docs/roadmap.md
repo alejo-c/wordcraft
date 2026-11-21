@@ -1,6 +1,6 @@
 # WordCraft roadmap: milestones and what's next
 
-Status: 2026-11-18. Helix uses native line numbering and Insert-mode shortcuts. Native and browser acceptance remain pending.
+Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Native and browser acceptance remain pending.
 
 > **Last reviewed:** 2026-10-10 · **Last updated:** 2026-11-03 · **Change:** minor (#3693: additional Delete Previous Sentence command and shortcut; Word-parity estimates unchanged); previously minor (M15: Arabic mirrored UI #1195; 28 UI languages; Hebrew UI and native IME acceptance remain open); previously trivial (HTML import keeps preformatted lines with CR, CRLF or LF input newlines (#4810); numeric character references retain their separate meaning; readiness estimates unchanged; previously trivial: egui 0.37 migration: 27 interface languages remain pinned by `craft-i18n.rev` (9205108…), and the input-method handling has synthetic regressions while managed CI passed and native acceptance (#155–#164) remains open; previously trivial: M6: Manage Sources imports Word's `Sources.xml`, #2640; previously minor: Czech proofing review fixes; previously minor: Portuguese proofing; previously minor: Polish interface and Polish proofing; previously trivial: M7: formatting revisions landed, #41; previously trivial: M5: Draw Table and Eraser landed, #303; previously minor: beta distance restated: ~15 points, ~150–230 h; previously: alpha gate checked: six core workflows pass; previously major: milestones moved here from ROADMAP.md; Current focus set from the re-measured gaps) · **Target:** Microsoft Word (Microsoft 365) for Mac 16.113.4
 
@@ -34,6 +34,7 @@ Opus 5.5 agent wall-clock.
 - Verify view alignment, caret shape after clicking, relative Layout line numbers and active-line shading.
 - 2026-11-18 revision: verify that Ctrl+F and Ctrl+E page and scroll in Normal and use native shortcuts in Insert.
 - Re-run the full quality gate once main's existing layout, proofing and ODT test failures are resolved.
+- 2026-11-21 verification: formatting and Clippy passed; Swiss German/Portuguese language rules and moved ODT frame page-anchor tests failed. Later gates were skipped.
 
 ## Alpha gate (core workflows)
 
@@ -82,6 +83,7 @@ languages, screen-reader access, ecosystem decisions (VBA, add-ins, cloud), an i
 
 ## Revision history
 
+- 2026-11-21: Added a fixed compact Web Layout line-number gutter; verify gutter placement in the browser.
 - 2026-11-17: Added native Helix user-configuration acceptance checks; Word readiness estimates unchanged.
 - 2026-11-17: Added acceptance coverage for Helix view alignment and caret visibility.
 

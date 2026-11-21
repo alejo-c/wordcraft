@@ -102,6 +102,7 @@ People trust WordCraft with their writing; a crash loses their work. **This outr
 
 ## Quality gates
 Before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). Commit after every arc of work that builds, with a task id in the message (`M2.1: line spacing dialog`).
+Redirect verbose verification output to a text file, then search for failed after the command finishes.
 
 ## Typing behaves like Word
 Helix copy and paste use the user's system clipboard through the existing clipboard integration. Do not add Helix registers.

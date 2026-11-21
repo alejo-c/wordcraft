@@ -3497,6 +3497,47 @@ fn web_view_is_one_page() {
 }
 
 #[test]
+fn web_line_numbers_use_a_fixed_compact_gutter() {
+    let mut d = Document::from_text("one\ntwo\nthree");
+    d.last_section.line_numbers = Some(wordcraft_doc::section::LineNumbering { start: 32_767, distance: 72.0, ..Default::default() });
+    for margin in [36.0, 144.0] {
+        d.last_section.margin_left = margin;
+        d.last_section.margin_right = margin;
+        d.last_section.gutter = 36.0;
+        for width in [300.0, 800.0] {
+            let opts = LayoutOptions { view: ViewMode::Web, web_width: width, ..Default::default() };
+            let web = layout(&d, &mut LayoutCache::new(), &opts);
+            let page = &web.pages[0];
+            assert_eq!(page.body.x, 48.0);
+            assert_eq!(page.body.w, width - 48.0 - 18.0);
+            assert_eq!(page.numbered_lines.len(), 3);
+            assert_eq!(web.line_number_at(&Pos::body(1, 0), 0), Some(2));
+            for numbers in [page.clone(), page.with_relative_line_numbers(&d, 2)] {
+                let mut labels = 0;
+                for item in &numbers.items {
+                    if let Placed::Lines { story: DECOR_STORY, path, para, x, .. } = item
+                        && matches!(path.0.as_slice(), [super::flow::LINE_NUMBER_PATH, _])
+                    {
+                        labels += 1;
+                        assert!(*x >= 0.0, "line number is clipped at {x}");
+                        let right = x + para.lines[0].xs.last().unwrap();
+                        assert!((right - (page.body.x - 6.0)).abs() < 0.01);
+                    }
+                }
+                assert_eq!(labels, 3);
+            }
+        }
+        let print = lay(&d);
+        assert_eq!(print.pages[0].body.x, margin + 36.0);
+        assert_eq!(d.last_section.line_numbers.as_ref().unwrap().distance, 72.0);
+    }
+    d.last_section.line_numbers = None;
+    let web = layout(&d, &mut LayoutCache::new(), &LayoutOptions { view: ViewMode::Web, ..Default::default() });
+    assert_eq!(web.pages[0].body.x, 18.0);
+    assert!(web.pages[0].numbered_lines.is_empty());
+}
+
+#[test]
 fn hostile_props_do_not_panic() {
     crate::test_fonts();
     let mut d = Document::from_text("x\ny");

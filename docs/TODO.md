@@ -2,6 +2,7 @@
 
 ## Pending
 
+- Verify Web Layout's compact line-number gutter in the browser after changing document page margins.
 - Verify Helix Normal/Select switching after modifier shortcuts and clipboard-only copy/paste on desktop and web.
   - Source: docs/roadmap.md and docs/ui-parity.md.
   - Hook: canvas_events and the Helix keyboard adapter in crates/ui-egui/src/keys/.
@@ -11,6 +12,7 @@
 ## Deferred / low priority
 
 - Resolve the existing full quality gate failures tracked in docs/roadmap.md.
+- Resolve engine test failures in Swiss German/Portuguese language rules and moved ODT frame page anchoring.
 - Investigate UI library failures in backstage::tests::rtl_template_titles_are_right_aligned and theme::tests::interface_symbols_have_glyphs.
 
 ## DO-NOT list (load-bearing constraints)

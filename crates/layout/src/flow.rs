@@ -784,7 +784,11 @@ pub(crate) const LINE_NUMBER_PATH: u32 = u32::MAX;
 /// each column of a multi-column section gets its own (#6018), as in Word.
 fn line_numbers(ctx: &mut Ctx, pb: &mut PageBuilder, block: u32, pl: &ParaLayout, (l0, l1): (usize, usize), y: f32) -> Vec<Placed> {
     let mut items = Vec::new();
-    if let Some(ln) = pb.sect.line_numbers.clone().filter(|_| !pb.web && pl.rp.style != "Header" && !pl.rp.suppress_line_numbers)
+    if let Some(ln) = pb
+        .sect
+        .line_numbers
+        .clone()
+        .filter(|_| (!pb.web || ctx.opts.view == ViewMode::Web) && pl.rp.style != "Header" && !pl.rp.suppress_line_numbers)
         && let Some(first) = pl.lines.get(l0)
     {
         for li in l0..l1 {
