@@ -10,3 +10,4 @@ Format: one line per completed task, newest last, at most 20 words. Architecture
 - Moved Spotlight paragraph badges outside the page and reserved canvas space for them.
 - Resolved the main-to-custom merge, preserving Helix and Spotlight alongside upstream Backstage and paste fixes.
 - Helix reuses Layout line numbering, and Insert routes shortcuts through WordCraft.
+- Web Layout line numbers use a fixed compact gutter independent of print margins.

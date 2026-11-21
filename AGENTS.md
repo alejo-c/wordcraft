@@ -106,6 +106,7 @@ Spotlight belongs in the native canvas and Styles pane. Use the shown preview do
 Full CI is memory and process heavy. If it fails on tests unrelated to the change, record the failures and finish targeted checks without rerunning full CI.
 
 Before every commit: `cargo xtask ci` (fmt, clippy -D warnings, tests, assets, layers, wasm). Commit after every arc of work that builds, with a task id in the message (`M2.1: line spacing dialog`).
+Redirect verbose verification output to a text file, then search for failed after the command finishes.
 
 ## Typing behaves like Word
 Helix copy and paste use the user's system clipboard through the existing clipboard integration. Do not add Helix registers.

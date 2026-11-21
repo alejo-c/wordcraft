@@ -1,21 +1,13 @@
 # WordCraft TODO
 
-## Pending
-
-- Verify spotlight manually in the native desktop app with real DOCX and ODT documents, including zoom, scrolling and docked styles.
-- Verify Helix modal editing interactively on the native desktop and web alongside Spotlight.
-  - Verify Normal/Select switching after modifier shortcuts and clipboard-only copy/paste.
-  - Verify viewport alignment, caret shape after clicking, relative line numbers and active-line shading.
-  - Source: docs/roadmap.md and docs/ui-parity.md.
-  - Hook: canvas_events and the Helix keyboard adapter in crates/ui-egui/src/keys/.
-- Verify Helix viewport alignment, caret shape after clicking, relative Layout line numbers and active-line shading on desktop and web.
-- Verify Ctrl+F and Ctrl+E in Helix Normal and Insert on desktop and web.
-
 ## Deferred / low priority
 
 - Investigate the quality gate failures tracked in docs/roadmap.md, including Fit One Page, continuous-view navigation, ODT frame anchoring and language-pack rules.
 - Investigate RTL template-caption alignment and U+3002 glyph coverage in backstage::tests::rtl_template_titles_are_right_aligned and theme::tests::interface_symbols_have_glyphs. See docs/spotlight.md.
 - Align Spotlight tests and documentation with custom's disabled-by-default preference; two Spotlight regressions currently assume enabled.
+- Resolve the existing full quality gate failures tracked in docs/roadmap.md.
+- Resolve engine test failures in Swiss German/Portuguese language rules and moved ODT frame page anchoring.
+- Investigate UI library failures in backstage::tests::rtl_template_titles_are_right_aligned and theme::tests::interface_symbols_have_glyphs.
 
 ## DO-NOT list (load-bearing constraints)
 

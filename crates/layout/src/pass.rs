@@ -178,6 +178,12 @@ fn reflow_sect(first: &SectionProps, opts: &LayoutOptions) -> SectionProps {
         s.line_numbers = None;
     }
     s.margin_left = 18.0;
+    if opts.view == ViewMode::Web
+        && let Some(numbers) = s.line_numbers.as_mut()
+    {
+        s.margin_left = 48.0;
+        numbers.distance = 6.0;
+    }
     s.margin_right = 18.0;
     s.margin_top = 18.0;
     s.gutter = 0.0;

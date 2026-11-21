@@ -1,0 +1,1 @@
+cargo b -r -p wordcraft --locked && cp ./target/release/wordcraft ~/.local/share/cargo/bin/

@@ -1,5 +1,6 @@
 # UI parity with Microsoft Word
 
+Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Interactive acceptance remains pending.
 Status: 2026-11-18. Helix uses Layout line numbering and WordCraft shortcuts in Insert mode. Interactive acceptance remains pending.
 Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relative line numbers and optional active-line shading. Interactive acceptance remains pending.
 Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page and native Styles pane color indicators; manual desktop verification pending.
@@ -19,6 +20,9 @@ Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page 
 - In Normal and Select, zt aligns the caret with the top, zz/zc/zm center it vertically, and zb aligns it with the bottom. The scroll range limits alignment at document boundaries. The caret and selection stay in place.
 - Normal and Select use a block caret, including after a click. Insert uses the text insertion bar.
 - Enable numbers through Layout > Line Numbers. In focused Normal and Select, the current numbered line retains its absolute label and other labels show their distance from the caret. Insert, an unfocused canvas and a caret outside numbered text use absolute labels. Desktop users can set line-number = "absolute" under [editor].
+- Web Layout reserves a fixed 48 pt left gutter when line numbering is enabled, with a 6 pt gap before the text. Document page margins, gutter and numbering distance do not affect this view. With numbering off, its left inset is 18 pt. Print Layout keeps the document settings.
+- Web Layout gutter validation: targeted layout and line-number tests passed; headless previews with narrow and wide print margins were inspected. Browser acceptance remains pending.
+- Full gate on 2026-11-21: formatting and Clippy passed; engine language-rule and ODT frame-anchor tests failed. Later gates were skipped.
 - DocLayout::line_number_at finds the caret's ordinal among lines eligible for native numbering. Page::with_relative_line_numbers replaces labels for the canvas, preserving their style, alignment and spacing. The document and export keep absolute numbering.
 - Set cursorline = true under [editor] in the desktop Helix config to shade the current visual line, including within a wrapped paragraph.
 - gg/ge go to document boundaries; gh/gl/gs go to line boundaries or the first nonblank character; a count before gg or G selects a paragraph by number.
@@ -44,6 +48,7 @@ Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page 
 
 ## Helix revision history
 
+- 2026-11-21: Web Layout uses a fixed compact gutter for absolute and relative line numbers, independent of print margins.
 - 2026-11-17: Added optional Helix modes, movement, selection-first edits, saved preferences and mode status.
 - 2026-11-17: Merged Helix editing with custom's Spotlight controls; interactive acceptance remains pending.
 - 2026-11-17: Added XDG configuration loading, custom modal keymaps and native clipboard configuration without new crates or subprocesses.

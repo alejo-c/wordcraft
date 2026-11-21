@@ -1,6 +1,6 @@
 # Where WordCraft falls short of Word
 
-Status: 2026-11-18. Helix uses native line numbering and Insert-mode shortcuts. Interactive acceptance remains pending.
+Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Interactive acceptance remains pending.
 
 ## Helix editing extension
 
@@ -199,6 +199,7 @@ Page Setup's margin, paper-size and document-grid number boxes scroll long text 
 
 ## Revision history
 
+- 2026-11-21: Web Layout uses a compact line-number gutter independent of print margins; ranked Word gaps remain unchanged.
 - 2026-11-17: Recorded native Helix configuration support and unsupported integrations; Word readiness estimates unchanged.
 - 2026-11-19: Enabled line numbering is visible in Web Layout, with room for labels inside narrow windows.
 

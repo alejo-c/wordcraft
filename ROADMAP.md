@@ -1,9 +1,10 @@
 # WordCraft roadmap
 
+- Status update: 2026-11-19. Web Layout displays enabled line numbers; readiness estimates unchanged.
+Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Browser acceptance remains pending.
 Status: 2026-11-18. Helix uses the existing document line numbering and restores native shortcuts in Insert mode.
 Status: 2026-11-17. Added Helix view alignment, modal caret rendering and line feedback; interactive acceptance remains pending.
 Spotlight status, 2026-11-17: native paragraph-style badges outside the page and matching Styles pane indicators; see docs/spotlight.md.
-- Status update: 2026-11-19. Web Layout displays enabled line numbers; readiness estimates unchanged.
 
 > **Last reviewed:** 2026-10-31 · **Last updated:** 2026-11-12 · **Change:** minor (added layout.fitOnePage and its Layout › Page Setup ribbon button to condense a multi-page document by one page while preserving typography hierarchy); previously minor (#3398: persistent screen paper colors; parity estimates unchanged); previously minor (#3693: additional Delete Previous Sentence command and shortcut; Word-parity estimates unchanged)
 > **CLI path update:** 2026-11-04 · Options before a non-Unicode input filename no longer make the CLI reject that filename; text option values still require Unicode; `run --file` and `run --script` retain native paths. No ranked gap or readiness estimate changes.
@@ -927,7 +928,11 @@ MATH glyphs that reference the same construction now share its immutable variant
 
 ## Revision history
 
+<<<<<<< HEAD
 - 2026-11-17: Merged the initial Helix modal editing implementation into custom alongside Spotlight. Readiness estimates unchanged.
+=======
+- 2026-11-21: Web Layout line numbers use a fixed compact gutter independent of print margins and numbering distance.
+>>>>>>> feat/line-numbers-web-view
 - 2026-11-17: Added native Helix configuration and custom binding support; Word readiness estimates unchanged.
 - 2026-11-17: Fixed modal v-release paste routing and removed Helix registers in favor of the system clipboard.
 - 2026-11-17: Added Helix vertical view alignment, block caret rendering, relative line numbers and optional current-line shading.
