@@ -207,6 +207,7 @@ pub struct Session {
     pub windows: crate::cmd::view::Windows,
     /// Read Aloud player (Review › Speech).
     pub read_aloud: crate::speech::ReadAloud,
+    pub mardok: crate::mardok::State,
     /// Preferences the front end saves between runs.
     pub prefs: Prefs,
     /// The system region (#838): the paper a new blank document starts on, the default

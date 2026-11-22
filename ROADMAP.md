@@ -1501,3 +1501,7 @@ MATH glyphs that reference the same construction now share its immutable variant
 ### Format Painter integration refresh, 2026-10-30
 
 Single-click release applies the armed painter to the target word without trailing spaces and disarms it. Explicit selections retain their scope (#1455, partial). Source and UI regressions are retained after the canvas/input module split. Earlier Windows pointer and browser qualification are historical; current-head hosted validation is pending, and native shortcut/Mint qualification is not newly claimed.
+
+### Mardok integration, 2026-11-21
+
+The final Mardok ribbon tab offers local DOCX/ODT parsing with selectable outputs, article semantic and reference validation, and XML structure validation. A resizable bottom panel retains logs and reports. Registered commands also expose the integration to unconfined native automation; browser and confined automation cannot launch the external CLI. Word-parity estimates are unchanged.

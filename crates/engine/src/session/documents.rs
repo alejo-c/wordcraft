@@ -273,6 +273,7 @@ impl Session {
             building_blocks: _,
             ui_requests: _,
             read_aloud: _,
+            mardok: _,
             prefs: _,
             system_region: _,
             keymap: _,

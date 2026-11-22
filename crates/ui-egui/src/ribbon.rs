@@ -226,6 +226,7 @@ fn tab_body(row: &mut RibbonRow<'_>, app: &mut WordApp, tab: &str) {
         "Developer" => developer(row, app),
         "Citations" => zotero(row, app),
         "Help" => help(row, app),
+        "Mardok" => crate::mardok::ribbon(row, app),
         "Table Design" => table_design(row, app),
         "Table Layout" => table_layout(row, app),
         "Equation" if app.session.math.is_some() => crate::equation_tab::show(row, app),

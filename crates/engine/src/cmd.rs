@@ -107,6 +107,7 @@ pub fn registry() -> Registry {
     v.extend(user_templates::specs());
     v.extend(protect::specs());
     v.extend(speech::specs());
+    v.extend(crate::mardok::specs());
     v.extend(controls::specs());
     Registry::new(v)
 }

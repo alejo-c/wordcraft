@@ -110,12 +110,14 @@ impl WordApp {
                 if !app.has_document() || stale(app) {
                     return;
                 }
-                panes::show(app, ui, |ui, _cx, app| {
-                    if app.session.md_source.is_some() {
-                        crate::md_source::show(app, ui);
-                    } else {
-                        canvas::show(app, ui);
-                    }
+                crate::mardok::show(app, ui, |app, ui| {
+                    panes::show(app, ui, |ui, _cx, app| {
+                        if app.session.md_source.is_some() {
+                            crate::md_source::show(app, ui);
+                        } else {
+                            canvas::show(app, ui);
+                        }
+                    });
                 });
                 if app.session.read_aloud.open && !stale(app) {
                     read_aloud::show(app, ui);

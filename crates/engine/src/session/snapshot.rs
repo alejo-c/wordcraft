@@ -149,6 +149,7 @@ impl Session {
             pending_ime_application_change: _,
             ime_origin: _,
             read_aloud: _,
+            mardok: _,
             // The other windows, like `view`: not part of the document or its history.
             windows: _,
             prefs: _,

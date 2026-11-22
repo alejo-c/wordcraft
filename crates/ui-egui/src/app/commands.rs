@@ -34,6 +34,14 @@ impl WordApp {
     /// Close, Envelopes, Labels and Finish & Merge on a document with unsaved changes first ask
     /// Save / Don't Save / Cancel, and the command runs once that is answered (`ui.saveChanges`).
     pub fn run(&mut self, id: &str, params: Value) -> Result<Value, String> {
+        if id == "mardok.xml" && params.get("path").is_none() && command_enabled(self, id) {
+            let request = PickRequest::open("mardokXml").filter(tl!("XML files"), &["xml"]);
+            return match self.ask_file(request, file_dialogs::AfterPick::MardokXml) {
+                file_dialogs::Asked::Done(result) => result,
+                file_dialogs::Asked::Pending => Ok(json!({"pending": "mardokXml"})),
+                file_dialogs::Asked::Busy => Err(tl!("A file dialog is already open.").into()),
+            };
+        }
         // Undo and Redo act on whole steps: a SmartArt typing run still open is folded into its one step first,
         // or Undo would take back only the last keystroke of it.
         if matches!(id, "edit.undo" | "edit.undoTo" | "edit.redo") {

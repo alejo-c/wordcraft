@@ -388,6 +388,7 @@ impl WordApp {
             }
         }
         zotero::poll(self, ctx);
+        crate::mardok::poll(self, ctx);
         read_aloud::poll(self, ctx);
         self.clear_stale_change_picture();
         let _ = self.poll_file_dialog();

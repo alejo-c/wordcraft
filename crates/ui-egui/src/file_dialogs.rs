@@ -57,19 +57,29 @@ fn interface_path(path: &str) -> String {
 /// What to do with the path picked in a dialog.
 pub(crate) enum AfterPick {
     /// Open the picked document from the window showing `document` ([`WordApp::open_file`]).
-    OpenDocument { document: u64 },
+    OpenDocument {
+        document: u64,
+    },
     /// Insert the picked picture, or replace the pending Change Picture target.
     Picture,
     /// Save the document there, then carry on.
-    SaveAs { after: AfterSave, document: u64 },
+    SaveAs {
+        after: AfterSave,
+        document: u64,
+    },
     /// Save a copy there in this format (`pdf`, `docx`, `png`…).
-    Export { ext: String },
+    Export {
+        ext: String,
+    },
     /// Write the PDF of these print settings there (File › Print › Save these pages as PDF).
-    PrintPdf { settings: Value },
+    PrintPdf {
+        settings: Value,
+    },
     /// Load the picked CSV/TSV/text file or spreadsheet as the mail-merge recipients (#240, #334).
     Recipients,
     /// Add every picked font file (#582, #1789).
     Font,
+    MardokXml,
     /// Import the picked Word bibliography file (`b:Sources`: Word's `Sources.xml`) into the
     /// document through Manage Sources (#2640).
     #[cfg(not(target_arch = "wasm32"))]
@@ -260,6 +270,10 @@ impl WordApp {
     /// Do what the dialog was for with the picked path (`None`: the user cancelled).
     pub(crate) fn finish_pick(&mut self, after: AfterPick, picked: Option<String>) -> Result<Value, String> {
         match after {
+            AfterPick::MardokXml => {
+                let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
+                self.run("mardok.xml", json!({"path": path}))
+            }
             AfterPick::OpenDocument { document } => {
                 let Some(path) = picked else { return Ok(json!({"cancelled": true})) };
                 let r = self.open_file(&path, Some(document));

@@ -21,6 +21,11 @@ pub(crate) struct Announcement {
     at: f64,
 }
 
+pub(crate) fn say(app: &mut WordApp, text: String, ctx: &egui::Context) {
+    let serial = app.announcement.as_ref().map_or(0, |a| a.serial.wrapping_add(1));
+    app.announcement = Some(Announcement { text, serial, at: ctx.input(|i| i.time) * 1000.0 });
+}
+
 /// Announces what the shortcut for command `id` did, once it has run; nothing for a command Word
 /// doesn't announce.
 pub(crate) fn after_shortcut(app: &mut WordApp, id: &str, ctx: &egui::Context) {

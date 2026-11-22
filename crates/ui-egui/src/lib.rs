@@ -51,6 +51,7 @@ pub mod keys;
 pub mod keytips;
 pub(crate) mod language_packs;
 mod local_time;
+mod mardok;
 pub mod md_source;
 pub mod mini_toolbar;
 pub mod objects;
