@@ -125,6 +125,10 @@ fn main() {
 fn step(harness: &mut egui_kittest::Harness<'_, WordApp>) {
     let ctx = harness.ctx.clone();
     craft::ui::shell::embed::before_input(&ctx, |out| harness.state_mut().frame_input(out));
+    let viewport = harness.input().viewport_id;
+    let mut events = std::mem::take(&mut harness.input_mut().events);
+    harness.state_mut().filter_raw_events(&ctx, viewport, &mut events);
+    harness.input_mut().events = events;
     harness.step();
 }
 

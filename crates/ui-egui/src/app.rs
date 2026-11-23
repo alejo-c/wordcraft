@@ -267,6 +267,18 @@ impl WordApp {
         FrameInput::new(self.root_env()).commands(commands).host(self.host.clone())
     }
 
+    /// Filters raw input events for Helix modal editing before the framework's input hook turns
+    /// them into routed editor intents, IME edits or shortcuts. Call right after `embed::before_input`.
+    pub fn filter_raw_input(&mut self, ctx: &egui::Context, raw: &mut egui::RawInput) {
+        self.filter_raw_events(ctx, raw.viewport_id, &mut raw.events);
+    }
+
+    /// Like [`Self::filter_raw_input`], for callers that borrow the event list separately from the
+    /// harness or `RawInput`.
+    pub fn filter_raw_events(&mut self, ctx: &egui::Context, viewport: egui::ViewportId, events: &mut Vec<egui::Event>) {
+        crate::keys::helix::filter_raw_events(self, ctx, viewport, events);
+    }
+
     /// Start-up with no document to open (#766): show File › Home (Blank document, the templates
     /// and Recent), as Word starts, when the Start screen setting is on (the default). No document
     /// is open until the user picks Blank document or a template or opens a file (#1129): Esc or

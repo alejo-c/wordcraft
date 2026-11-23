@@ -92,6 +92,30 @@ pub fn page_input(app: &mut WordApp, inputs: &[EditorInput], pass: &ToolPass, ct
             crate::crop::leave(app);
             continue;
         }
+        if app.ui.helix_editing {
+            if matches!(e, EditorInput::Cancel) && crate::keys::helix::cancel(app) {
+                crate::keys::helix::after_event(app);
+                continue;
+            }
+            if crate::keys::helix::block_caret(app)
+                && matches!(
+                    e,
+                    EditorInput::Text(_)
+                        | EditorInput::ImeCommit
+                        | EditorInput::DeleteSurrounding { .. }
+                        | EditorInput::Preedit { .. }
+                        | EditorInput::Move(..)
+                        | EditorInput::Delete { .. }
+                        | EditorInput::Newline
+                        | EditorInput::Tab
+                        | EditorInput::BackTab
+                        | EditorInput::Edit(EditCommand::Delete)
+                )
+            {
+                continue;
+            }
+            crate::keys::helix::before_insert_input(app, e);
+        }
         if drop_refused_replacement(app, e, &mut batch) || equation_input(app, ctx, pass, e, &mut batch) {
             continue;
         }

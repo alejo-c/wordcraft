@@ -625,3 +625,197 @@ fn input_method_commits_follow_modal_bindings_before_insert_mode() {
     frame(&mut a, vec![press(Key::Escape, Modifiers::NONE)]);
     assert_eq!(a.session.selected_text(), "Z");
 }
+
+fn runtime_harness(text: &str) -> egui_kittest::Harness<'static, WordApp> {
+    use craft::platform::clipboard::{Clipboard, MemoryClipboard};
+    let mut a = app(text);
+    a.session.dirty = false;
+    let spec = || crate::test_harness::install_spec().clipboard(Clipboard::new(MemoryClipboard::default()));
+    let mut h = crate::test_harness::builder_with(spec).with_size(egui::vec2(1440.0, 900.0)).with_step_dt(1.0 / 60.0).build_ui_state(
+        |ui, app: &mut WordApp| {
+            let ctx = ui.ctx().clone();
+            app.logic(&ctx);
+            app.ui(ui);
+        },
+        a,
+    );
+    let ctx = h.ctx.clone();
+    h.state_mut().canvas.focus_page(&ctx);
+    for _ in 0..8 {
+        crate::test_harness::frame(&mut h);
+        if h.state().canvas.focused(&ctx) {
+            break;
+        }
+    }
+    assert!(h.state().canvas.focused(&ctx), "the canvas must hold focus for Helix runtime tests");
+    h
+}
+
+fn runtime_batch(h: &mut egui_kittest::Harness<'static, WordApp>, events: Vec<Event>) {
+    h.input_mut().events.extend(events);
+    crate::test_harness::frame(h);
+}
+
+fn runtime_tap_char(h: &mut egui_kittest::Harness<'static, WordApp>, key: Key, text: &str) {
+    runtime_batch(
+        h,
+        vec![
+            Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+            Event::Text(text.into()),
+            Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+        ],
+    );
+}
+
+#[test]
+fn full_runtime_normal_movements_across_paragraphs_preserve_document_text() {
+    let original = "First paragraph here.\nSecond paragraph here.\n\nFourth paragraph here.";
+    let mut h = runtime_harness(original);
+    let initial_rev = h.state().session.rev();
+    assert!(!crate::mini_toolbar::visible(h.state()));
+
+    runtime_tap_char(&mut h, Key::J, "j");
+    assert_eq!(h.state().session.sel.focus.path, wordcraft_doc::Path(vec![1]));
+    assert!(!crate::mini_toolbar::visible(h.state()));
+
+    runtime_tap_char(&mut h, Key::J, "j");
+    runtime_tap_char(&mut h, Key::J, "j");
+    assert_eq!(h.state().session.sel.focus.path, wordcraft_doc::Path(vec![3]));
+
+    runtime_tap_char(&mut h, Key::K, "k");
+    runtime_tap_char(&mut h, Key::K, "k");
+    runtime_tap_char(&mut h, Key::H, "h");
+    runtime_tap_char(&mut h, Key::L, "l");
+    runtime_tap_char(&mut h, Key::L, "l");
+    runtime_tap_char(&mut h, Key::W, "w");
+    runtime_tap_char(&mut h, Key::W, "w");
+    runtime_tap_char(&mut h, Key::W, "w");
+    runtime_tap_char(&mut h, Key::B, "b");
+    runtime_tap_char(&mut h, Key::E, "e");
+    runtime_tap_char(&mut h, Key::G, "g");
+    runtime_tap_char(&mut h, Key::E, "e");
+    runtime_tap_char(&mut h, Key::G, "g");
+    runtime_tap_char(&mut h, Key::G, "g");
+    assert_eq!(h.state().session.sel.anchor, wordcraft_doc::Pos::body(0, 0));
+
+    for key in [Key::ArrowDown, Key::ArrowRight, Key::ArrowLeft, Key::ArrowUp, Key::End, Key::Home] {
+        runtime_batch(
+            &mut h,
+            vec![
+                Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+                Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+            ],
+        );
+    }
+
+    let ctrl = Modifiers { ctrl: true, command: !cfg!(target_os = "macos"), ..Default::default() };
+    for key in [Key::D, Key::U, Key::F, Key::B, Key::E] {
+        runtime_batch(
+            &mut h,
+            vec![
+                Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: ctrl },
+                Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: ctrl },
+            ],
+        );
+    }
+    // Step one extra frame so any leaked framework shortcut would have fired via `run_fired`.
+    crate::test_harness::frame(&mut h);
+
+    assert_eq!(body(h.state()), original);
+    assert_eq!(h.state().session.rev(), initial_rev);
+    assert!(!h.state().session.dirty);
+    assert!(!h.state().session.view.nav_pane);
+    assert!(h.state().dialog_host.is_empty());
+    assert!(!crate::mini_toolbar::visible(h.state()));
+}
+
+#[test]
+fn full_runtime_normal_mode_suppresses_editing_keys_and_ime_deletions() {
+    let original = "Alpha\nBeta\nGamma";
+    let mut h = runtime_harness(original);
+    let initial_rev = h.state().session.rev();
+
+    runtime_tap_char(&mut h, Key::J, "j");
+    for key in [Key::Backspace, Key::Delete, Key::Enter, Key::Tab] {
+        runtime_batch(
+            &mut h,
+            vec![
+                Event::Key { key, physical_key: Some(key), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+                Event::Key { key, physical_key: Some(key), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+            ],
+        );
+    }
+    runtime_batch(
+        &mut h,
+        vec![
+            Event::Ime(egui::ImeEvent::DeleteSurrounding { before_chars: 1, after_chars: 1 }),
+            Event::Ime(egui::ImeEvent::DeleteSurroundingBytes { before_bytes: 1, after_bytes: 1 }),
+            Event::Ime(egui::ImeEvent::Commit("j".into())),
+        ],
+    );
+    crate::test_harness::frame(&mut h);
+
+    assert_eq!(body(h.state()), original);
+    assert_eq!(h.state().session.rev(), initial_rev);
+    assert_eq!(h.state().session.sel.focus.path, wordcraft_doc::Path(vec![2]));
+}
+
+#[test]
+fn full_runtime_insert_typing_escape_and_native_shortcuts_work() {
+    let mut h = runtime_harness("Hello\nWorld");
+    runtime_batch(
+        &mut h,
+        vec![
+            Event::Key { key: Key::I, physical_key: Some(Key::I), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+            Event::Text("i".into()),
+            Event::Key { key: Key::Z, physical_key: Some(Key::Z), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+            Event::Text("Z".into()),
+        ],
+    );
+    assert_eq!(h.state().canvas.helix.mode, Mode::Insert);
+    assert_eq!(body(h.state()), "ZHello\nWorld");
+
+    let native = Modifiers::COMMAND | if cfg!(target_os = "macos") { Modifiers::MAC_CMD } else { Modifiers::CTRL };
+    runtime_batch(
+        &mut h,
+        vec![
+            Event::Key { key: Key::E, physical_key: Some(Key::E), pressed: true, repeat: false, modifiers: native },
+            Event::Key { key: Key::E, physical_key: Some(Key::E), pressed: false, repeat: false, modifiers: native },
+        ],
+    );
+    crate::test_harness::frame(&mut h);
+    let p = h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap();
+    assert_eq!(p.props.align, Some(wordcraft_doc::props::Align::Center));
+
+    runtime_batch(
+        &mut h,
+        vec![
+            Event::Key { key: Key::Escape, physical_key: Some(Key::Escape), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+            Event::Key { key: Key::Escape, physical_key: Some(Key::Escape), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+        ],
+    );
+    assert_eq!(h.state().canvas.helix.mode, Mode::Normal);
+
+    runtime_tap_char(&mut h, Key::J, "j");
+    assert_eq!(body(h.state()), "ZHello\nWorld");
+    assert_eq!(h.state().session.sel.focus.path, wordcraft_doc::Path(vec![1]));
+}
+
+#[test]
+fn fallback_page_input_guard_prevents_normal_mode_mutations_without_raw_hook() {
+    let original = "One\nTwo\nThree";
+    let mut h = runtime_harness(original);
+    let initial_rev = h.state().session.rev();
+
+    // Bypass `test_harness::frame` (simulating a secondary viewport where `raw_input_hook` did not run).
+    h.input_mut().events.extend([
+        Event::Key { key: Key::J, physical_key: Some(Key::J), pressed: true, repeat: false, modifiers: Modifiers::NONE },
+        Event::Text("j".into()),
+        Event::Key { key: Key::J, physical_key: Some(Key::J), pressed: false, repeat: false, modifiers: Modifiers::NONE },
+    ]);
+    h.step();
+
+    assert_eq!(body(h.state()), original);
+    assert_eq!(h.state().session.rev(), initial_rev);
+    assert_eq!(h.state().session.sel.focus.path, wordcraft_doc::Path(vec![1]));
+}

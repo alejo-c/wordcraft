@@ -61,6 +61,7 @@ pub(crate) struct State {
     count: usize,
     pending: Option<Pending>,
     drop_text: bool,
+    raw_filtered: bool,
     document: Option<u64>,
     last_find: Option<(String, bool, bool)>,
     insert_start: usize,
@@ -488,9 +489,13 @@ fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<
             Key::F => "pageDown",
             Key::U => "halfPageUp",
             Key::D => "halfPageDown",
-            Key::E | Key::Y => return bindings::scroll(app, key == Key::Y).map(|()| true),
+            Key::E | Key::Y => {
+                app.canvas.helix.drop_text = text_follows;
+                return bindings::scroll(app, key == Key::Y).map(|()| true);
+            }
             _ => return Ok(false),
         };
+        app.canvas.helix.drop_text = text_follows;
         return motion(app, name).map(|()| true);
     }
     if m.alt {
@@ -537,6 +542,17 @@ fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<
     Ok(true)
 }
 
+/// Whether Helix currently owns keyboard input on the document canvas.
+fn accepts_input(app: &WordApp, ctx: &egui::Context) -> bool {
+    app.ui.helix_editing
+        && !app.ui.backstage
+        && !app.modal_open()
+        && !app.keytips_active
+        && !craft::ui::runtime::overlay::any_open(ctx, craft::ui::runtime::overlay::OpenFilter::Keys)
+        && !crate::chrome::search::is_open(app)
+        && app.canvas.focused(ctx)
+}
+
 /// Applies Helix's raw keyboard events and returns the ones the rest of the app still sees.
 pub(super) fn filter_events(app: &mut WordApp, events: &[Event]) -> Vec<Event> {
     let mut kept = Vec::with_capacity(events.len());
@@ -558,14 +574,76 @@ pub(super) fn filter_events(app: &mut WordApp, events: &[Event]) -> Vec<Event> {
     kept
 }
 
-/// Takes Helix's keys from the frame before the framework reads them, while the page has the keyboard.
+/// Filters `events` for `viewport` before the framework's input hook turns them into routed editor
+/// intents, IME queues or app shortcuts.
+pub(crate) fn filter_raw_events(app: &mut WordApp, ctx: &egui::Context, viewport: egui::ViewportId, events: &mut Vec<Event>) {
+    let previous = app.windows.shown();
+    let switched =
+        app.windows.native() && viewport == egui::ViewportId::ROOT && previous != app.windows.root_key() && app.enter_window(app.windows.root_key());
+    if accepts_input(app, ctx) {
+        let before = events.len();
+        *events = filter_events(app, events);
+        app.canvas.helix.raw_filtered = true;
+        if events.len() != before {
+            ctx.request_repaint_of(viewport);
+        }
+    }
+    if switched {
+        app.enter_window(previous);
+    }
+}
+
+/// Fallback pass-start filter for viewports or harnesses that bypassed [`filter_raw_events`].
 pub(crate) fn raw_events(app: &mut WordApp, ctx: &egui::Context) {
-    if !app.ui.helix_editing || app.ui.backstage || app.modal_open() || app.keytips_active || !app.canvas.focused(ctx) {
+    if std::mem::take(&mut app.canvas.helix.raw_filtered) || !accepts_input(app, ctx) {
         return;
     }
     let events = ctx.input(|i| i.events.clone());
     let kept = filter_events(app, &events);
     ctx.input_mut(|i| i.events = kept);
+}
+
+/// Keeps multiple Insert-mode editor inputs within one pass in the same Insert undo group.
+pub(super) fn before_insert_input(app: &mut WordApp, input: &craft::behavior::editor::EditorInput) {
+    use craft::behavior::editor::EditorInput;
+    use craft::behavior::intent::EditCommand;
+    if app.ui.helix_editing
+        && app.canvas.helix.mode == Mode::Insert
+        && matches!(
+            input,
+            EditorInput::Text(_)
+                | EditorInput::ImeCommit
+                | EditorInput::DeleteSurrounding { .. }
+                | EditorInput::Delete { .. }
+                | EditorInput::Newline
+                | EditorInput::Tab
+                | EditorInput::BackTab
+                | EditorInput::Edit(EditCommand::Paste | EditCommand::Cut | EditCommand::Delete)
+        )
+    {
+        join_insert(app);
+    }
+}
+
+/// Handles `EditorInput::Cancel` (Escape) when it reaches `page_input` (e.g. a secondary viewport
+/// where the framework stripped `Key::Escape` ahead of `window_ui`).
+pub(super) fn cancel(app: &mut WordApp) -> bool {
+    if !app.ui.helix_editing {
+        return false;
+    }
+    if !app.canvas.helix.custom_prefix.is_empty() {
+        app.canvas.helix.custom_prefix.clear();
+        return true;
+    }
+    if matches!(app.canvas.helix.pending, Some(Pending::View)) {
+        app.canvas.helix.pending = None;
+        app.canvas.helix.count = 0;
+        return true;
+    }
+    if let Err(error) = set_mode(app, Mode::Normal) {
+        app.status(error);
+    }
+    true
 }
 
 pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> bool {

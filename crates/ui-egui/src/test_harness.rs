@@ -91,6 +91,10 @@ pub(crate) fn context_with(spec: impl FnOnce() -> InstallSpec) -> egui::Context 
 pub(crate) fn frame(h: &mut egui_kittest::Harness<'_, crate::WordApp>) {
     let ctx = h.ctx.clone();
     craft::ui::shell::embed::before_input(&ctx, |out| h.state_mut().frame_input(out));
+    let viewport = h.input().viewport_id;
+    let mut events = std::mem::take(&mut h.input_mut().events);
+    h.state_mut().filter_raw_events(&ctx, viewport, &mut events);
+    h.input_mut().events = events;
     h.step();
 }
 
@@ -167,8 +171,9 @@ pub(crate) fn driver_logic(ctx: &egui::Context, app: &mut crate::WordApp) {
 /// app's input first (`embed::before_input`), then the app's `logic` and `ui` run in the pass. Without that hook
 /// a frame has no command states, so no key reaches a command and a focus request waits for ever. The pass's
 /// texture changes are dropped, since no renderer takes them.
-pub(crate) fn pass(ctx: &egui::Context, app: &mut crate::WordApp, input: egui::RawInput) {
+pub(crate) fn pass(ctx: &egui::Context, app: &mut crate::WordApp, mut input: egui::RawInput) {
     craft::ui::shell::embed::before_input(ctx, |out| app.frame_input(out));
+    app.filter_raw_input(ctx, &mut input);
     ctx.run_ui(input, |ui| {
         logic(ui.ctx(), app);
         app.ui(ui);

@@ -109,6 +109,7 @@ impl eframe::App for App {
             self.drops.dropped(files, DropTarget::Elsewhere);
         }
         embed::before_input(ctx, |out| self.app.frame_input(out));
+        self.app.filter_raw_input(ctx, raw);
     }
     fn logic(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
         self.logic_pass(ctx, Some(frame));

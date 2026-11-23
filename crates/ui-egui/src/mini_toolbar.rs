@@ -78,6 +78,10 @@ pub fn visible(app: &WordApp) -> bool {
     if app.canvas.mini_dismissed.as_ref() == Some(&app.session.sel) {
         return false;
     }
+    // Modal Helix selections move on every keystroke and must not pop up the formatting toolbar.
+    if crate::keys::helix::block_caret(app) {
+        return false;
+    }
     // Never for a collapsed caret.
     !app.session.sel.is_collapsed()
 }

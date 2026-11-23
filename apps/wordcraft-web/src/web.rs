@@ -234,6 +234,7 @@ impl eframe::App for WebShell {
             });
         }
         embed::before_input(ctx, |out| self.app.frame_input(out));
+        self.app.filter_raw_input(ctx, raw);
     }
 
     /// Draws the app.
