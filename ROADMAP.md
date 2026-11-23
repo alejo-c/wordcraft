@@ -2,6 +2,7 @@
 
 - Status update: 2026-11-19. Web Layout displays enabled line numbers; readiness estimates unchanged.
 Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Browser acceptance remains pending.
+Status: 2026-11-23. Helix smooth-scroll plugin bindings use native page motions; other plugin commands remain unsupported.
 Status: 2026-11-18. Helix uses the existing document line numbering and restores native shortcuts in Insert mode.
 Status: 2026-11-17. Added Helix view alignment, modal caret rendering and line feedback; interactive acceptance remains pending.
 Spotlight status, 2026-11-17: native paragraph-style badges outside the page and matching Styles pane indicators; see docs/spotlight.md.
@@ -434,6 +435,7 @@ Imported Word 97–2003 `.doc`/`.dot` files now ask for a supported DOCX target 
 - 2026-10-15: Find opens Navigation on Results; editing the query restores Results after manual Headings/Pages navigation. Typed and selected-text searches retain document contents (#2096).
 
 | Date | What landed |
+| 2026-11-23 | trivial | Progress log: Helix smooth-scroll plugin bindings use native page motions; peek remains unsupported |
 | 2026-11-20 | trivial | Progress log: `wordcraft-cli mcp` needs both automation roots; `--connect` refused (#7124) |
 | 2026-11-17 | trivial | Progress log: file formats, codecs and protocols come from craft-libs (#778) |
 | 2026-11-15 | trivial | Progress log: Get the Missing Fonts (download pages for missing fonts their publisher gives away) |
@@ -946,6 +948,7 @@ MATH glyphs that reference the same construction now share its immutable variant
 
 ## Revision history
 
+- 2026-11-23: Helix smooth-scroll plugin bindings use native page motions; other plugin commands remain unsupported.
 - 2026-11-21: Web Layout line numbers use a fixed compact gutter independent of print margins and numbering distance.
 - 2026-11-17: Merged the initial Helix modal editing implementation into custom alongside Spotlight. Readiness estimates unchanged.
 - 2026-11-17: Added native Helix configuration and custom binding support; Word readiness estimates unchanged.

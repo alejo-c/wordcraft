@@ -1,6 +1,7 @@
 # Where WordCraft falls short of Word
 
 Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Interactive acceptance remains pending.
+Helix status: 2026-11-23. Smooth-scroll plugin bindings use native page movements; other plugin commands remain unsupported.
 
 ## Helix editing extension
 
@@ -12,6 +13,7 @@ Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Interact
 - 2026-11-17 revision: fixed v-release paste routing and unified Helix copy/paste with the system clipboard; verify interactively.
 - 2026-11-17 revision: added vertical view alignment, block caret rendering, relative line numbers and optional line shading.
 - 2026-11-18 revision: relative labels use Layout line numbering. Insert uses native WordCraft modifier shortcuts.
+- 2026-11-23 revision: smooth-scroll plugin bindings use native page movements; peek and other plugin commands remain unsupported.
 
 ## Word gap assessment
 

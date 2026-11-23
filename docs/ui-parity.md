@@ -1,5 +1,6 @@
 # UI parity with Microsoft Word
 
+Status: 2026-11-23. Helix smooth-scroll plugin bindings use native page movements; other plugin commands remain unsupported. Interactive acceptance remains pending.
 Status: 2026-11-21. Web Layout line numbers use a fixed compact gutter. Interactive acceptance remains pending.
 Status: 2026-11-18. Helix uses Layout line numbering and WordCraft shortcuts in Insert mode. Interactive acceptance remains pending.
 Status: 2026-11-17. Helix canvas adds view alignment, a mode-aware caret, relative line numbers and optional active-line shading. Interactive acceptance remains pending.
@@ -13,6 +14,7 @@ Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page 
 - Supported custom actions include character, visual-line, word, long-word, line-boundary, document and page movements; selection extension; modes; insertion, deletion, case, undo, redo, search, scroll and clipboard actions. :w and :q use the normal save and close flows. no_op disables a key.
 - Clipboard-provider none disables Helix copy/paste actions, including default y/d/c/p/P/R and their configured aliases. Native provider names use WordCraft's existing clipboard services and retain rich text where available. Custom command providers, terminal-only providers and unknown providers report unsupported; no process is launched.
 - Shell commands, macros, syntax-node commands, window commands and other unsupported action names report a status message when invoked. Command arrays are checked for unsupported names and unavailable clipboard providers before any action executes. Unrelated editor settings are ignored.
+- The smooth-scroll plugin's page-up, page-down, half-page-up and half-page-down commands use the same native movements without animation. Other plugin commands, including peek-toggle, remain unsupported and report a status message.
 - Missing files retain the defaults. Invalid, non-UTF-8, non-regular or oversized configuration files retain defaults and report an error. Parsing and keymap nesting, entries and command arrays are bounded. Browser builds do not read the host filesystem.
 - The status bar shows Normal, Insert or Select and any pending count or key sequence. Clicking it returns to Normal.
 - Normal mode starts with a selected character. Movements replace the selection; v enters Select, where movements extend it. Escape returns to Normal.
@@ -48,6 +50,7 @@ Spotlight status, 2026-11-17: WordCraft paragraph-style badges outside the page 
 
 ## Helix revision history
 
+- 2026-11-23: Smooth-scroll plugin bindings map to native page movements; other plugin commands remain unsupported.
 - 2026-11-21: Web Layout uses a fixed compact gutter for absolute and relative line numbers, independent of print margins.
 - 2026-11-17: Added optional Helix modes, movement, selection-first edits, saved preferences and mode status.
 - 2026-11-17: Merged Helix editing with custom's Spotlight controls; interactive acceptance remains pending.

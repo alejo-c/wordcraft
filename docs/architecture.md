@@ -1,5 +1,6 @@
 # WordCraft architecture
 
+Status: 2026-11-23. Helix smooth-scroll plugin bindings map to native page movements; other plugin commands remain unsupported.
 Status: 2026-11-17. Helix view alignment and line feedback use the existing canvas layout and scroll state.
 
 Spotlight update, 2026-11-13: UI-only paragraph badges and Styles pane indicators share a style color function; see spotlight.md.
@@ -28,9 +29,10 @@ Spotlight update, 2026-11-13: UI-only paragraph badges and Styles pane indicator
 - crates/ui-egui/src/keys/helix/config.rs:32: Config implements FromStr, bounded native configuration loading, XDG path resolution, normalized key names and per-mode binding lookup. Configuration is held once per application and shared across document windows.
 - Uses: the existing locked toml dependency, wordcraft_engine::io::read_regular_file_within, native environment variables, Mode and WordApp::helix_config.
 - Used by: Helix enablement, the canvas event adapter, explicit configuration reload and configuration regression tests.
-- crates/ui-egui/src/keys/helix/bindings.rs:292: custom dispatches nested user bindings; execute validates command arrays; clipboard_copy and clipboard_paste enforce the configured clipboard policy.
+- crates/ui-egui/src/keys/helix/bindings.rs:300: custom dispatches nested user bindings; execute validates command arrays; clipboard_copy and clipboard_paste enforce the configured clipboard policy.
 - Uses: Config::binding, existing Helix editing helpers, WordApp::run, native clipboard services and the single-selection model.
 - Used by: modal key and committed-text handlers, built-in system-clipboard bindings and keyboard regression tests.
+- resolve maps supported Helix action names; the smooth-scroll plugin's page and half-page commands reuse the native page motions without animation, and other plugin commands remain unsupported.
 - Default y, d, c, p, P and R use clipboard_copy and clipboard_paste, including configured aliases. execute checks their clipboard policy before running command arrays. The private Helix register and its yank/paste helpers are removed.
 - crates/ui-egui/src/keys/canvas.rs:171: note_key_state records key presses and paste modifiers before Helix consumes events, preventing a modal v release from inheriting stale paste modifiers.
 - Uses: CanvasState::v_pressed, CanvasState::paste_mods, shortcuts::is_modifier_key.
@@ -48,6 +50,7 @@ Spotlight update, 2026-11-13: UI-only paragraph badges and Styles pane indicator
 - 2026-11-17: Added XDG configuration and custom binding modules; reused the existing TOML parser and bounded file reader.
 - 2026-11-17: Removed Helix register storage and reused system clipboard helpers; moved paste-key tracking before modal dispatch.
 - 2026-11-17: Reused canvas scrolling and line geometry for Helix viewport alignment and caret feedback.
+- 2026-11-23: Reused native page motions for the Helix smooth-scroll plugin bindings; other plugin commands remain unsupported.
 
 ## Architecture overview
 

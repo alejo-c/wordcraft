@@ -110,6 +110,11 @@ fn resolve(name: &str) -> Option<Action> {
         "extend_prev_char" => Action::Find(true, false, true),
         "extend_till_char" => Action::Find(false, true, true),
         "extend_till_prev_char" => Action::Find(true, true, true),
+        // Helix's smooth-scroll plugin commands animate the same native movements; WordCraft applies them immediately.
+        ":half-page-down-smooth" => Action::Motion("halfPageDown", false),
+        ":half-page-up-smooth" => Action::Motion("halfPageUp", false),
+        ":page-up-smooth" => Action::Motion("pageUp", false),
+        ":page-down-smooth" => Action::Motion("pageDown", false),
         "yank_to_clipboard" | ":clipboard-yank" | ":clipboard-yank-join" => Action::ClipboardCopy,
         "paste_clipboard_after" | ":clipboard-paste-after" => Action::ClipboardPaste(false, false),
         "paste_clipboard_before" | ":clipboard-paste-before" => Action::ClipboardPaste(true, false),

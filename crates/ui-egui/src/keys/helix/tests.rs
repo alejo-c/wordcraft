@@ -272,6 +272,34 @@ fn normal_control_keys_page_and_scroll() {
 }
 
 #[test]
+fn smooth_scroll_plugin_bindings_use_native_movements_and_peek_stays_unsupported() {
+    let document = "Paragraph text.\n".repeat(100);
+    let mut a = configured(
+        &document,
+        "[keys.normal]\nC-d = ':half-page-down-smooth'\nC-u = ':half-page-up-smooth'\nC-f = ':page-down-smooth'\nC-b = ':page-up-smooth'\nA-d = ':peek-toggle'",
+    );
+    let start = a.session.sel.focus.clone();
+    frame(&mut a, vec![press(Key::D, Modifiers::CTRL)]);
+    assert!(a.session.sel.focus.path > start.path);
+    let half_down = a.session.sel.focus.clone();
+    frame(&mut a, vec![press(Key::U, Modifiers::CTRL)]);
+    assert!(a.session.sel.focus.path < half_down.path);
+    let before_page_down = a.session.sel.focus.clone();
+    frame(&mut a, vec![press(Key::F, Modifiers::CTRL)]);
+    assert!(a.session.sel.focus.path > before_page_down.path);
+    let page_down = a.session.sel.focus.clone();
+    frame(&mut a, vec![press(Key::B, Modifiers::CTRL)]);
+    assert!(a.session.sel.focus.path < page_down.path);
+
+    let selection = a.session.sel.clone();
+    let text = body(&a);
+    frame(&mut a, vec![press(Key::D, Modifiers::ALT)]);
+    assert_eq!(a.session.sel, selection);
+    assert_eq!(body(&a), text);
+    assert!(a.status.as_ref().is_some_and(|status| status.text.contains("Unsupported")));
+}
+
+#[test]
 fn insert_shortcuts_use_wordcraft_even_with_conflicting_helix_bindings() {
     let mut a = configured("one two three", "[keys.insert]\nC-e = 'scroll_down'\nC-f = 'page_down'");
     text(&mut a, "i");
