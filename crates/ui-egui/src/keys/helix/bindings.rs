@@ -183,10 +183,10 @@ pub(super) fn scroll(app: &mut WordApp, up: bool) -> Result<(), String> {
         .map(|c| c.height.max(c.width))
         .filter(|h| h.is_finite() && *h > 0.0)
         .ok_or("Cannot determine the Helix scroll line height")?;
-    let step = height * app.canvas.scale * count as f32;
-    let mut target = app.canvas.scroll_request.unwrap_or(app.canvas.scroll_offset);
-    target.y = (target.y + if up { -step } else { step }).max(0.0);
-    app.canvas.scroll_request = Some(target);
+    let step = height * app.canvas.view.zoom as f32 * crate::canvas::PX_PER_PT * count as f32;
+    let mut target = app.canvas.view.offset;
+    target.1 = (target.1 + f64::from(if up { -step } else { step })).max(0.0);
+    app.canvas.view.offset = target;
     app.canvas.scroll_to_caret = false;
     Ok(())
 }

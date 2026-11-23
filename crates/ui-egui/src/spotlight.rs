@@ -15,11 +15,6 @@ pub(crate) fn on_left(app: &crate::WordApp) -> bool {
     app.session.view.styles_pane_dock != wordcraft_engine::StylesPaneDock::Left
 }
 
-pub(crate) fn continuous_gutter(app: &crate::WordApp, scale: f32) -> f32 {
-    let width = gutter(app);
-    if width > 0.0 && !on_left(app) { width + crate::canvas::markup_width(app) * scale } else { width }
-}
-
 #[derive(Debug)]
 pub(crate) struct StyleBlock {
     style: String,
@@ -61,12 +56,6 @@ pub fn color(id: &str) -> Color32 {
     Color32::from_rgb(70 + (hash % 140) as u8, 70 + ((hash >> 8) % 140) as u8, 70 + ((hash >> 16) % 140) as u8)
 }
 
-pub(crate) fn indicator(ui: &mut Ui, id: &str, name: &str) {
-    let (rect, response) = ui.allocate_exact_size(vec2(10.0, 10.0), Sense::hover());
-    ui.painter().rect_filled(rect, 2.0, color(id));
-    response.on_hover_text(name);
-}
-
 fn block_rect(page: &Page, rect: Rect, block: &StyleBlock, left: bool, markup: f32) -> Option<Rect> {
     let scale = rect.width() / page.w;
     if !scale.is_finite() || scale <= 0.0 {
@@ -94,7 +83,7 @@ fn paint_page(document: &Document, page: &Page, ui: &Ui, page_rect: Rect, clip: 
     }
 }
 
-pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[Rect], bands: &[(f32, f32)]) {
+pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[Rect], bands: &[(f64, f64)]) {
     if !app.ui.spotlight {
         return;
     }
@@ -104,6 +93,7 @@ pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[R
     for (index, page) in layout.pages.iter().enumerate() {
         let Some(rect) = rects.get(index).copied() else { continue };
         let Some(&(top, bottom)) = bands.get(index) else { continue };
+        let (top, bottom) = (top as f32, bottom as f32);
         let viewport = ui.clip_rect();
         let band = Rect::from_min_max(pos2(viewport.left(), rect.top() + top), pos2(viewport.right(), rect.top() + bottom));
         let clip = viewport.intersect(band);

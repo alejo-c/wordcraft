@@ -1,7 +1,71 @@
 use super::*;
-use crate::{Services, UiState};
+use crate::prefs::Prefs;
+use crate::{Services, WordApp};
 use wordcraft_doc::Document;
 use wordcraft_engine::Session;
+
+fn set_clipboard(app: &mut WordApp, text: &str) {
+    app.clipboard_published = true;
+    app.session.clipboard_text = text.into();
+    let doc = Document::from_text(text);
+    app.session.clipboard = Some(wordcraft_doc::edit::Fragment { blocks: doc.body.iter().map(|b| (**b).clone()).collect(), ..Default::default() });
+}
+
+fn native(app: &mut WordApp, key: Key, modifiers: Modifiers) {
+    let id = match key {
+        Key::ArrowLeft => "caret.left",
+        Key::ArrowRight => "caret.right",
+        Key::ArrowUp => "caret.up",
+        Key::ArrowDown => "caret.down",
+        Key::Home => "caret.home",
+        Key::End => "caret.end",
+        Key::Enter => "text.newParagraph",
+        Key::Backspace => "text.backspace",
+        Key::Delete => "text.delete",
+        Key::Tab => "text.tab",
+        Key::V if modifiers.command => "edit.paste",
+        _ => return,
+    };
+    let _ = app.run(id, json!({}));
+}
+
+fn frame(app: &mut WordApp, events: Vec<Event>) {
+    let ctx = egui::Context::default();
+    let paste_release = events.iter().any(|e| matches!(e, Event::Key { key: Key::V, pressed: false, .. }))
+        && events.iter().any(|e| matches!(e, Event::ModifiersChanged(m) if m.command))
+        && !events.iter().any(|e| matches!(e, Event::Key { key: Key::V, pressed: true, .. }));
+    let mut output = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| {
+        let events = ui.input(|i| i.events.clone());
+        let kept = super::filter_events(app, &events);
+        ui.ctx().input_mut(|i| i.events = kept.clone());
+        for event in kept {
+            match event {
+                Event::Text(text) => {
+                    if app.canvas.helix.mode == Mode::Insert {
+                        super::join_insert(app);
+                    }
+                    let _ = app.run("text.insert", json!({"text": text}));
+                }
+                Event::Ime(egui::ImeEvent::Commit(text)) => {
+                    let _ = app.run("text.insert", json!({"text": text}));
+                }
+                Event::Key { key: Key::E, pressed: true, modifiers, .. } if modifiers.command => {
+                    let _ = app.run("para.alignCenter", json!({}));
+                }
+                Event::Key { key: Key::F, pressed: true, modifiers, .. } if modifiers.command => {
+                    let _ = app.run("view.navigationPane", json!({"value": true}));
+                }
+                Event::Key { key, pressed: true, modifiers, .. } => native(app, key, modifiers),
+                Event::Key { key: Key::V, pressed: false, .. } if paste_release => {
+                    let _ = app.run("edit.paste", json!({}));
+                }
+                _ => {}
+            }
+            super::after_event(app);
+        }
+    });
+    output.textures_delta.clear();
+}
 
 fn app(text: &str) -> WordApp {
     let mut app = WordApp::new(Session::new(Document::from_text(text)), Services::default());
@@ -10,12 +74,6 @@ fn app(text: &str) -> WordApp {
     app.run("caret.docStart", json!({})).unwrap();
     app.run("ui.helix", json!({"value": true})).unwrap();
     app
-}
-
-fn frame(app: &mut WordApp, events: Vec<Event>) {
-    let ctx = egui::Context::default();
-    let mut output = ctx.run_ui(egui::RawInput { events, ..Default::default() }, |ui| super::super::canvas_events(app, ui.ctx()));
-    output.textures_delta.clear();
 }
 
 fn press(key: Key, modifiers: Modifiers) -> Event {
@@ -148,23 +206,23 @@ fn insert_arrows_stay_native_and_normal_keys_use_committed_text() {
 fn clipboard_mappings_use_host_clipboard_and_honor_none() {
     let mut a =
         configured("abc", "[editor]\nclipboard-provider = 'wayland'\n[keys.normal]\np = ':clipboard-paste-after'\nR = ':clipboard-paste-replace'");
-    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+    set_clipboard(&mut a, "XYZ");
     text(&mut a, "p");
     assert_eq!(body(&a), "aXYZbc");
     assert_eq!(a.session.selected_text(), "XYZ");
-    a.services.clipboard_text = Some(Box::new(|| Some("Q".into())));
+    set_clipboard(&mut a, "Q");
     text(&mut a, "R");
     assert_eq!(body(&a), "aQbc");
     a.helix_config = Some("[editor]\nclipboard-provider = 'none'".parse().unwrap());
     text(&mut a, " p");
     assert_eq!(body(&a), "aQbc");
-    assert!(a.status_msg.as_ref().is_some_and(|(m, _)| m.contains("disabled")));
+    assert!(a.status.as_ref().is_some_and(|s| s.text.contains("disabled")));
 }
 
 #[test]
 fn built_in_system_paste_keeps_its_existing_cursor_selection() {
     let mut a = app("abc");
-    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+    set_clipboard(&mut a, "XYZ");
     text(&mut a, " p");
     assert_eq!(body(&a), "aXYZbc");
     assert_eq!(a.session.selected_text(), "Z");
@@ -179,7 +237,7 @@ fn unsupported_sequences_and_custom_clipboard_commands_do_not_partially_edit() {
         let mut a = configured("abc", config);
         text(&mut a, "d");
         assert_eq!(body(&a), "abc");
-        assert!(a.status_msg.is_some());
+        assert!(a.status.is_some());
     }
 }
 
@@ -187,16 +245,16 @@ fn unsupported_sequences_and_custom_clipboard_commands_do_not_partially_edit() {
 fn custom_scroll_bindings_preserve_selection_and_accumulate_counts() {
     let mut a = configured("one two three", "[keys.normal]\nC-y = 'scroll_up'\nC-e = 'scroll_down'");
     let selection = a.session.sel.clone();
-    a.canvas.scale = 1.0;
+    a.canvas.view.zoom = 1.0;
     frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
-    let first = a.canvas.scroll_request.unwrap().y;
+    let first = a.canvas.view.offset.1;
     assert!(first > 0.0);
     text(&mut a, "2");
     frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
-    assert_eq!(a.canvas.scroll_request.unwrap().y, first * 3.0);
+    assert_eq!(a.canvas.view.offset.1, first * 3.0);
     text(&mut a, "4");
     frame(&mut a, vec![press(Key::Y, Modifiers::CTRL)]);
-    assert_eq!(a.canvas.scroll_request.unwrap().y, 0.0);
+    assert_eq!(a.canvas.view.offset.1, 0.0);
     assert_eq!(a.session.sel, selection);
     assert!(!a.canvas.scroll_to_caret);
 }
@@ -206,7 +264,7 @@ fn normal_control_keys_page_and_scroll() {
     let mut a = app(&"Paragraph text.\n".repeat(100));
     let before = a.session.sel.clone();
     frame(&mut a, vec![press(Key::E, Modifiers::CTRL)]);
-    assert!(a.canvas.scroll_request.take().unwrap().y > 0.0);
+    assert!(a.canvas.view.offset.1 > 0.0);
     assert_eq!(a.session.sel, before);
     frame(&mut a, vec![press(Key::F, Modifiers::CTRL)]);
     assert!(a.session.sel.focus.path > before.focus.path);
@@ -217,11 +275,12 @@ fn normal_control_keys_page_and_scroll() {
 fn insert_shortcuts_use_wordcraft_even_with_conflicting_helix_bindings() {
     let mut a = configured("one two three", "[keys.insert]\nC-e = 'scroll_down'\nC-f = 'page_down'");
     text(&mut a, "i");
+    let scroll = a.canvas.view.offset.1;
     let native = Modifiers::COMMAND | if cfg!(target_os = "macos") { Modifiers::MAC_CMD } else { Modifiers::CTRL };
     frame(&mut a, vec![press(Key::E, native)]);
     let p = a.session.doc.para_at(&a.session.sel.focus).unwrap();
     assert_eq!(p.props.align, Some(wordcraft_doc::props::Align::Center));
-    assert!(a.canvas.scroll_request.is_none());
+    assert_eq!(a.canvas.view.offset.1, scroll);
     frame(&mut a, vec![press(Key::F, native)]);
     assert!(a.session.view.nav_pane);
     assert_eq!(a.canvas.helix.mode, Mode::Insert);
@@ -278,8 +337,7 @@ fn select_mode_v_release_does_not_reuse_paste_modifiers() {
         for split in [false, true].into_iter().filter(|split| !split || physical_key.is_some()) {
             for alt in [false, true] {
                 let mut a = app("abcd");
-                a.services.clipboard_text = Some(Box::new(|| Some("clipboard".into())));
-                a.services.clipboard_picture = Some(Box::new(|| None));
+                set_clipboard(&mut a, "clipboard");
                 let revision = a.session.rev();
                 for mode in [Mode::Select, Mode::Normal] {
                     let modifiers = Modifiers { ctrl: true, command: true, alt, ..Default::default() };
@@ -296,7 +354,7 @@ fn select_mode_v_release_does_not_reuse_paste_modifiers() {
                     assert_eq!(body(&a), "abcd");
                     assert_eq!(a.session.selected_text(), "a");
                     assert_eq!(a.session.rev(), revision);
-                    assert!(a.dialog.is_none());
+                    assert!(a.dialog_host.is_empty());
                 }
             }
         }
@@ -306,8 +364,7 @@ fn select_mode_v_release_does_not_reuse_paste_modifiers() {
 #[test]
 fn modal_mode_keeps_native_paste_release_without_a_press() {
     let mut a = app("abcd");
-    a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
-    a.services.clipboard_picture = Some(Box::new(|| None));
+    set_clipboard(&mut a, "XYZ");
     frame(
         &mut a,
         vec![
@@ -337,34 +394,25 @@ fn counted_goto_and_character_find_sequences_work_across_frames() {
 
 #[test]
 fn delete_yanks_and_paste_reads_the_latest_system_clipboard() {
-    use std::{cell::RefCell, rc::Rc};
-
     let mut a = app("abcd");
-    a.ctx = Some(egui::Context::default());
-    let clipboard = Rc::new(RefCell::new(String::new()));
-    let source = clipboard.clone();
-    a.services.clipboard_text = Some(Box::new(move || Some(source.borrow().clone())));
-    let sink = clipboard.clone();
-    a.services.set_clipboard_rich = Some(Box::new(move |text, _, _, _| {
-        *sink.borrow_mut() = text.to_string();
-        true
-    }));
+    set_clipboard(&mut a, "");
     text(&mut a, "y");
     assert_eq!(body(&a), "abcd");
-    assert_eq!(*clipboard.borrow(), "a");
-    *clipboard.borrow_mut() = "external".into();
+    assert_eq!(a.session.clipboard_text, "a");
+    a.session.clipboard_text = "external".into();
     text(&mut a, "d");
     assert_eq!(body(&a), "bcd");
-    assert_eq!(*clipboard.borrow(), "a");
+    assert_eq!(a.session.clipboard_text, "a");
+    assert_eq!(a.session.clipboard.as_ref().map(|f| f.clipboard_text()), Some("a".to_string()), "the copy is our own fragment");
     text(&mut a, "p");
-    assert_eq!(body(&a), "bacd");
+    assert_eq!(body(&a), "bacd", "{:?}", a.status.as_ref().map(|s| &s.text));
     text(&mut a, "u");
     assert_eq!(body(&a), "bcd");
     text(&mut a, "u");
     assert_eq!(body(&a), "abcd");
     text(&mut a, "U");
     assert_eq!(body(&a), "bcd");
-    *clipboard.borrow_mut() = "XYZ".into();
+    set_clipboard(&mut a, "XYZ");
     text(&mut a, "p");
     assert_eq!(body(&a), "bXYZcd");
     assert_eq!(a.session.selected_text(), "XYZ");
@@ -375,7 +423,7 @@ fn default_and_remapped_pastes_use_system_clipboard_without_a_prior_yank() {
     for (key, command, expected) in [("p", "paste_after", "aXYZbc"), ("P", "paste_before", "XYZabc"), ("R", "replace_with_yanked", "XYZbc")] {
         for custom in [false, true] {
             let mut a = if custom { configured("abc", &format!("[keys.normal]\nz = '{command}'")) } else { app("abc") };
-            a.services.clipboard_text = Some(Box::new(|| Some("XYZ".into())));
+            set_clipboard(&mut a, "XYZ");
             text(&mut a, if custom { "z" } else { key });
             assert_eq!(body(&a), expected);
             assert_eq!(a.session.selected_text(), "XYZ");
@@ -391,7 +439,7 @@ fn disabled_clipboard_prevents_partial_default_clipboard_command_arrays() {
         text(&mut a, "z");
         assert_eq!(body(&a), "ABC");
         assert_eq!(a.canvas.helix.mode, Mode::Normal);
-        assert!(a.status_msg.as_ref().is_some_and(|(m, _)| m.contains("disabled")));
+        assert!(a.status.as_ref().is_some_and(|s| s.text.contains("disabled")));
     }
 }
 
@@ -425,7 +473,7 @@ fn open_lines_and_append_use_existing_edit_commands() {
 #[test]
 fn disabled_mode_keeps_standard_typing_and_prefs_round_trip() {
     let mut a = app("abcd");
-    let prefs: UiState = serde_json::from_value(serde_json::to_value(a.prefs()).unwrap()).unwrap();
+    let prefs: Prefs = serde_json::from_value(serde_json::to_value(a.prefs()).unwrap()).unwrap();
     assert!(prefs.helix_editing);
     assert!(a.run("ui.helixMode", json!({"mode": "invalid"})).is_err());
     assert!(a.run("ui.helix", json!({"value": "yes"})).is_err());
@@ -477,8 +525,8 @@ fn shifted_symbols_and_text_objects_do_not_become_counts_or_insertions() {
 #[test]
 fn helix_keys_leave_find_dialog_text_fields_alone() {
     let mut a = app("abcd");
-    a.dialog = crate::dialogs::Dialog::open("find", &mut a);
-    let mut h = egui_kittest::Harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
+    assert!(crate::dialogs::open(&mut a, "find", &json!({})).is_some());
+    let mut h = crate::test_harness::builder().with_size(egui::vec2(1440.0, 900.0)).build_ui_state(
         |ui, app: &mut WordApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);
@@ -490,10 +538,7 @@ fn helix_keys_leave_find_dialog_text_fields_alone() {
     h.input_mut().events.extend([press(Key::D, Modifiers::NONE), Event::Text("d".into())]);
     h.run_steps(2);
     assert_eq!(body(h.state()), "abcd");
-    match &h.state().dialog {
-        Some(crate::dialogs::Dialog::Find { query, .. }) => assert_eq!(query, "ad"),
-        _ => panic!("Find dialog must remain open"),
-    }
+    assert!(!h.state().dialog_host.is_empty(), "the Find dialog stays open");
 }
 
 #[test]

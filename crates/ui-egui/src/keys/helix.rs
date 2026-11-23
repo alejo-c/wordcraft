@@ -537,6 +537,37 @@ fn key(app: &mut WordApp, key: Key, m: Modifiers, text_follows: bool) -> Result<
     Ok(true)
 }
 
+/// Applies Helix's raw keyboard events and returns the ones the rest of the app still sees.
+pub(super) fn filter_events(app: &mut WordApp, events: &[Event]) -> Vec<Event> {
+    let mut kept = Vec::with_capacity(events.len());
+    for (index, e) in events.iter().enumerate() {
+        let text_follows = app.ui.helix_editing
+            && matches!(e, Event::Key { pressed: true, .. })
+            && events
+                .get(index.saturating_add(1)..)
+                .unwrap_or_default()
+                .iter()
+                .take_while(|e| !matches!(e, Event::Key { pressed: true, .. }))
+                .any(|e| matches!(e, Event::Text(_)));
+        if event(app, e, text_follows) {
+            after_event(app);
+        } else {
+            kept.push(e.clone());
+        }
+    }
+    kept
+}
+
+/// Takes Helix's keys from the frame before the framework reads them, while the page has the keyboard.
+pub(crate) fn raw_events(app: &mut WordApp, ctx: &egui::Context) {
+    if !app.ui.helix_editing || app.ui.backstage || app.modal_open() || app.keytips_active || !app.canvas.focused(ctx) {
+        return;
+    }
+    let events = ctx.input(|i| i.events.clone());
+    let kept = filter_events(app, &events);
+    ctx.input_mut(|i| i.events = kept);
+}
+
 pub(crate) fn event(app: &mut WordApp, event: &Event, text_follows: bool) -> bool {
     if !app.ui.helix_editing {
         return false;

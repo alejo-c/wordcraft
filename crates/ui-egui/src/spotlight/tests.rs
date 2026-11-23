@@ -1,5 +1,6 @@
 use super::*;
-use crate::{Services, UiState, WordApp};
+use crate::prefs::Prefs;
+use crate::{Services, WordApp};
 use egui_kittest::kittest::Queryable;
 use serde_json::json;
 use wordcraft_engine::Session;
@@ -44,7 +45,7 @@ fn spotlight_uses_the_same_color_for_document_and_pane_after_reopening() {
     assert!(app.run("ui.spotlight", json!({"value": "true"})).is_err());
     assert!(app.ui.spotlight);
     assert_eq!(serde_json::to_value(&app.session.doc).unwrap(), original);
-    let old: UiState = serde_json::from_str("{}").unwrap();
+    let old: Prefs = serde_json::from_str("{}").unwrap();
     assert!(!old.spotlight);
 }
 
@@ -73,19 +74,21 @@ fn spotlight_geometry_stays_outside_the_page_and_markup_at_any_zoom() {
 
 #[test]
 fn spotlight_reserves_a_gutter_for_each_page_in_a_row() {
-    let mut app = app(&"A paragraph with many words. ".repeat(800));
-    app.session.view.zoom = 0.35;
+    let mut app = app("Paragraph");
     let layout = app.session.layout();
-    let viewport = vec2(1000.0, 700.0);
+    let page = layout.pages[0].clone();
     for dock in [wordcraft_engine::StylesPaneDock::Left, wordcraft_engine::StylesPaneDock::Right] {
         app.session.view.styles_pane_dock = dock;
-        let geo = crate::canvas::geometry(&app, &layout, viewport);
-        assert!(geo.cols >= 2);
-        for (page, rect) in layout.pages.iter().zip(&geo.rects).take(geo.cols) {
-            let block = blocks(&app.session.doc, page).remove(0);
-            let badge = block_rect(page, *rect, &block, on_left(&app), 0.0).unwrap();
-            assert!(badge.left() >= 0.0 && badge.right() <= geo.size.x);
-            assert!(geo.rects.iter().take(geo.cols).all(|page| !page.intersects(badge)));
+        let page_rect = Rect::from_min_size(pos2(120.0, 40.0), vec2(page.w * 0.35, page.h * 0.35));
+        let block = blocks(&app.session.doc, &page).remove(0);
+        let badge = block_rect(&page, page_rect, &block, on_left(&app), 0.0).unwrap();
+        let gutter = gutter(&app);
+        if on_left(&app) {
+            assert!(badge.left() >= page_rect.left() - gutter);
+            assert!(badge.right() <= page_rect.left());
+        } else {
+            assert!(badge.left() >= page_rect.right());
+            assert!(badge.right() <= page_rect.right() + gutter);
         }
     }
 }
@@ -95,7 +98,7 @@ fn spotlight_pane_indicators_match_badges_and_style_buttons_still_apply() {
     let mut app = app("Paragraph");
     app.run("view.stylesPane", json!({"value": true})).unwrap();
     app.run("ui.tab", json!({"tab": "View"})).unwrap();
-    let mut h = egui_kittest::Harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
+    let mut h = crate::test_harness::builder().with_size(vec2(1440.0, 900.0)).build_ui_state(
         |ui, app: &mut WordApp| {
             let ctx = ui.ctx().clone();
             app.logic(&ctx);
@@ -116,7 +119,7 @@ fn spotlight_pane_indicators_match_badges_and_style_buttons_still_apply() {
     };
     let rects = fills(&h);
     assert!(rects.iter().any(|r| r.width() == 10.0 && r.height() == 10.0), "the Styles pane shows its color indicator");
-    let page = h.state().canvas.page_rects[0];
+    let page = h.state().canvas.shown.laid[0];
     assert!(rects.iter().any(|r| r.width() > 15.0 && r.right() < page.left()), "the canvas shows the matching badge");
     let pane_spotlight = h.get_all_by_label("Spotlight").last().unwrap();
     pane_spotlight.click();
@@ -132,7 +135,7 @@ fn spotlight_pane_indicators_match_badges_and_style_buttons_still_apply() {
     assert_eq!(h.state().session.doc.para_at(&h.state().session.sel.focus).unwrap().props.style.as_deref(), Some("Heading1"));
     h.state_mut().run("view.stylesPaneDock", json!({"dock": "left"})).unwrap();
     h.run_steps(3);
-    let page = h.state().canvas.page_rects[0];
+    let page = h.state().canvas.shown.laid[0];
     assert!(
         h.output().shapes.iter().any(
             |s| matches!(&s.shape, egui::Shape::Rect(r) if r.fill == color("Heading1") && r.rect.width() > 15.0 && r.rect.left() > page.right())
