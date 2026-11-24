@@ -49,6 +49,9 @@ pub struct DisplayOptions {
     /// Leave this object out of the page: while it is dragged, the preview under the pointer
     /// stands in for it, so the page must not also show it where it was.
     pub hide_object: Option<wordcraft_doc::Pos>,
+    /// Leave line-number decorations out of the page raster so the UI can paint dynamic
+    /// relative line numbers as a fast overlay without invalidating cached page textures.
+    pub hide_line_numbers: bool,
 }
 
 impl Default for DisplayOptions {
@@ -63,6 +66,7 @@ impl Default for DisplayOptions {
             hide_ink: false,
             revisions: MarkupOptions::default(),
             hide_object: None,
+            hide_line_numbers: false,
         }
     }
 }

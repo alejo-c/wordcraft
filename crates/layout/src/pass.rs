@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use super::cache::{LayoutCache, Totals, env_hash, hash_of};
-use super::ctx::{Ctx, LINE_NUMBER_WIDTH, Pass, with_pct_base};
+use super::ctx::{Ctx, Pass, with_pct_base};
 use super::fields::{BOOKMARK_NOT_DEFINED, BookmarkPages};
 use super::floats::{EarlyFloats, WrapArea, early_covered, left_out_objects};
 use super::flow::{OutlinePass, place_outline_para, place_para};
@@ -178,12 +178,6 @@ fn reflow_sect(first: &SectionProps, opts: &LayoutOptions) -> SectionProps {
         s.line_numbers = None;
     }
     s.margin_left = 18.0;
-    if opts.view == ViewMode::Web
-        && let Some(numbers) = s.line_numbers.as_mut()
-    {
-        s.margin_left = 48.0;
-        numbers.distance = 6.0;
-    }
     s.margin_right = 18.0;
     s.margin_top = 18.0;
     s.gutter = 0.0;
@@ -574,18 +568,32 @@ pub(crate) fn layout_pass(
     let web_sect = mode.reflow.then(|| reflow_sect(first_sect, opts));
     let sect_ref = web_sect.as_ref().unwrap_or(first_sect);
     let web_sections: Vec<_> = if opts.view == ViewMode::Web {
-        let max_distance = (sect_ref.text_width() - LINE_NUMBER_WIDTH - 36.0).max(0.0);
-        let distance = |d: f32| (if d > 0.0 { d } else { 18.0 }).min(max_distance);
-        let gutter =
-            sections.iter().filter_map(|(_, s)| s.line_numbers.as_ref()).map(|ln| LINE_NUMBER_WIDTH + distance(ln.distance)).fold(0.0, f32::max);
+        const WEB_LINE_NUMBER_MIN_MARGIN: f32 = 28.0;
+        const WEB_LINE_NUMBER_PAD: f32 = 4.0;
+        const WEB_LINE_NUMBER_DISTANCE: f32 = 6.0;
+        let max_start = sections.iter().filter_map(|(_, s)| s.line_numbers.as_ref()).map(|ln| ln.start).max();
+        let margin_left = match max_start {
+            Some(start) => {
+                // Keep a compact 28 pt gutter for ordinary 1–3 digit line numbers; widen only
+                // when higher counts or a larger LineNumber style need more room so labels stay
+                // unclipped.
+                let mut label_w = |n| ctx.number_para(n).lines.first().and_then(|l| l.xs.last().copied()).unwrap_or(0.0);
+                let est_end = start.saturating_add((doc.body.len() as u32).max(99));
+                let sample_n = if est_end < 1000 { 888 } else { est_end };
+                let sample_w = label_w(start).max(label_w(sample_n));
+                let max_margin = (sect_ref.page_w - sect_ref.margin_right - 36.0).max(sect_ref.margin_left);
+                WEB_LINE_NUMBER_MIN_MARGIN.max(WEB_LINE_NUMBER_PAD + sample_w + WEB_LINE_NUMBER_DISTANCE).min(max_margin)
+            }
+            None => sect_ref.margin_left,
+        };
         sections
             .iter()
             .map(|(_, s)| {
                 let mut web = sect_ref.clone();
-                web.margin_left += gutter;
+                web.margin_left = margin_left;
                 web.line_numbers = s.line_numbers.clone();
                 if let Some(ln) = &mut web.line_numbers {
-                    ln.distance = distance(ln.distance);
+                    ln.distance = WEB_LINE_NUMBER_DISTANCE;
                 }
                 web
             })

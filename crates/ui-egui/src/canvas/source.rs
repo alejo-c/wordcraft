@@ -30,32 +30,16 @@ pub(super) struct WordPages {
     options: wordcraft_render::RenderOptions,
     /// The page a drag took an object off, and the object: rendered without it.
     hidden: Option<(usize, Pos)>,
-    /// Helix relative line numbers: the line the caret is on, or `None` for absolute numbers.
-    relative_origin: Option<u32>,
 }
 
 impl WordPages {
     /// The source of `layout` for this pass. The page fingerprints move out of the app for the pass; give them back
     /// with [`WordPages::into_keys`].
-    pub(super) fn new(
-        app: &mut WordApp,
-        layout: &Arc<DocLayout>,
-        dim_body: bool,
-        hidden: Option<(usize, Pos)>,
-        relative_origin: Option<u32>,
-    ) -> Self {
+    pub(super) fn new(app: &mut WordApp, layout: &Arc<DocLayout>, dim_body: bool, hidden: Option<(usize, Pos)>) -> Self {
         let view = view_key(app, dim_body, hidden.as_ref().map(|(_, p)| p));
         let options = page_render_options(app, dim_body);
         let doc = Arc::new(page_doc(app).clone());
-        WordPages {
-            doc,
-            layout: layout.clone(),
-            keys: RefCell::new(std::mem::take(&mut app.canvas.page_keys)),
-            view,
-            options,
-            hidden,
-            relative_origin,
-        }
+        WordPages { doc, layout: layout.clone(), keys: RefCell::new(std::mem::take(&mut app.canvas.page_keys)), view, options, hidden }
     }
 
     /// The pass's document snapshot, shared with the accessibility describer so the pass holds one copy.
@@ -73,7 +57,6 @@ impl ThumbSource<usize> for WordPages {
     fn revision(&self, page: &usize, _request: &ThumbRequest) -> Revision {
         let mut h = DefaultHasher::new();
         page_shows(&mut self.keys.borrow_mut(), &self.layout, *page, self.view).hash(&mut h);
-        self.relative_origin.hash(&mut h);
         Revision::new(h.finish())
     }
 
@@ -92,18 +75,10 @@ impl ThumbSource<usize> for WordPages {
         let scale = request.side as f32 / longest;
         let scale = if scale.is_finite() { scale.clamp(0.01, cap.max(0.01)) } else { 1.0 };
         let (doc, layout) = (Arc::clone(&self.doc), Arc::clone(&self.layout));
-        let origin = self.relative_origin;
         let mut options = self.options.clone();
         options.display.hide_object = self.hidden.as_ref().filter(|(hidden, _)| *hidden == index).map(|(_, pos)| pos.clone());
         ThumbRender::Later(Box::new(move |_cancel| {
             let Some(page) = layout.pages.get(index) else { return Ok(LoadedPicture::Blank) };
-            let relative;
-            let page = if let Some(origin) = origin {
-                relative = page.with_relative_line_numbers(&doc, origin);
-                &relative
-            } else {
-                page
-            };
             let img = if whole {
                 wordcraft_render::render_page(&doc, page, scale, &options)
             } else {

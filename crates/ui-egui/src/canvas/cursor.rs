@@ -1,6 +1,97 @@
-use super::pages::{page_render_options, page_screen_scale};
+use super::pages::{helix_overlay_line_numbers, page_doc, page_render_options, page_screen_scale, view_key};
 use super::story::dims_body;
 use super::{Color32, DocLayout, Hash, Hasher, Pos, Pos2, WordApp};
+
+/// Cached transparent raster of visible line numbers for one placed page while Helix relative line
+/// numbers are managed as a screen overlay.
+pub(crate) struct LineNumberOverlay {
+    key: (usize, usize, Option<u32>, u64, u32, u32, u32, u32),
+    area: wordcraft_geom::Rect,
+    rendered_size: (f32, f32),
+    texture: egui::TextureHandle,
+}
+
+/// Paints visible line numbers over each placed page when Helix manages line numbers as a screen
+/// overlay, keeping `WordPages::revision` constant as the caret moves.
+pub(super) fn paint_helix_line_numbers(
+    app: &mut WordApp,
+    ui: &egui::Ui,
+    layout: &std::sync::Arc<DocLayout>,
+    pages: &[craft::pages::ui::PlacedPage],
+    view_rect: egui::Rect,
+    dim_body: bool,
+    relative_origin: Option<u32>,
+) {
+    if !helix_overlay_line_numbers(app) {
+        app.canvas.line_number_overlays.clear();
+        return;
+    }
+    let ppp = ui.ctx().pixels_per_point();
+    let vkey = view_key(app, dim_body, None);
+    let opts = page_render_options(app, dim_body);
+    let mut prior = std::mem::take(&mut app.canvas.line_number_overlays);
+    let doc = page_doc(app);
+    let mut kept = Vec::new();
+    let clip_base = view_rect.intersect(ui.clip_rect());
+    for placed in pages {
+        let Some(page) = layout.pages.get(placed.page) else { continue };
+        if page.numbered_lines.is_empty() {
+            continue;
+        }
+        let (top, bottom) = placed.band;
+        let band = egui::Rect::from_min_max(
+            egui::pos2(placed.rect.min.x, placed.rect.min.y + top),
+            egui::pos2(placed.rect.max.x, placed.rect.min.y + bottom),
+        )
+        .intersect(clip_base);
+        if !band.is_positive() {
+            continue;
+        }
+        let scale = page_screen_scale(placed.rect, page, 1.0);
+        if !scale.is_finite() || scale <= 0.0 {
+            continue;
+        }
+        let y0 = ((band.min.y - placed.rect.min.y) / scale).max(0.0);
+        let y1 = ((band.max.y - placed.rect.min.y) / scale).min(page.h);
+        // Quantize outward to 64 pt bands so tiny scrolls reuse the cached overlay texture.
+        let qy0 = ((y0 / 64.0).floor() * 64.0).max(0.0);
+        let qy1 = ((y1 / 64.0).ceil() * 64.0).min(page.h);
+        let key = (
+            std::sync::Arc::as_ptr(layout) as usize,
+            placed.page,
+            relative_origin,
+            vkey,
+            scale.to_bits(),
+            ppp.to_bits(),
+            qy0.to_bits(),
+            qy1.to_bits(),
+        );
+        let entry = if let Some(pos) = prior.iter().position(|e| e.key == key) {
+            Some(prior.swap_remove(pos))
+        } else {
+            let (area, draws) = wordcraft_layout::display::line_number_draws(doc, page, relative_origin, (qy0, qy1), &opts.display);
+            area.filter(|_| !draws.is_empty()).map(|area| {
+                let raster_scale = (scale * ppp).max(0.01);
+                let pw = ((area.w * raster_scale).ceil() as u32).clamp(1, wordcraft_render::MAX_SIDE);
+                let ph = ((area.h * raster_scale).ceil() as u32).clamp(1, wordcraft_render::MAX_SIDE);
+                let img = wordcraft_render::render_items(doc, &draws, area, raster_scale, &opts);
+                let color_image = egui::ColorImage::from_rgba_premultiplied([img.width as usize, img.height as usize], &img.pixels);
+                let texture = ui.ctx().load_texture(format!("helix_ln_{}", placed.page), color_image, egui::TextureOptions::LINEAR);
+                LineNumberOverlay { key, area, rendered_size: (pw as f32 / raster_scale, ph as f32 / raster_scale), texture }
+            })
+        };
+        if let Some(entry) = entry {
+            let screen_rect = egui::Rect::from_min_size(
+                egui::pos2(placed.rect.min.x + entry.area.x * scale, placed.rect.min.y + entry.area.y * scale),
+                egui::vec2(entry.rendered_size.0 * scale, entry.rendered_size.1 * scale),
+            );
+            let painter = ui.painter().with_clip_rect(band);
+            painter.image(entry.texture.id(), screen_rect, egui::Rect::from_min_max(egui::pos2(0.0, 0.0), egui::pos2(1.0, 1.0)), Color32::WHITE);
+            kept.push(entry);
+        }
+    }
+    app.canvas.line_number_overlays = kept;
+}
 
 pub(super) fn relative_line_origin(app: &WordApp, layout: &DocLayout, focused: bool) -> Option<u32> {
     if !focused

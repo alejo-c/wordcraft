@@ -249,11 +249,27 @@ pub struct CanvasState {
     /// The scroll offset held while a command preview is shown, so the page does not move as
     /// the previewed text reflows.
     pub(crate) preview_scroll: Option<(f64, f64)>,
+    /// Active scrollbar thumb drag continuation when `PageView`'s `CanvasScrollbars` cancels a
+    /// multi-frame drag under `Bind::given` pixel alignment.
+    scrollbar_drag: Option<ScrollbarDrag>,
+    /// Cached screen overlays for Helix relative line numbers, kept outside page rasters so
+    /// cursor movement never invalidates cached page/detail tiles.
+    pub(crate) line_number_overlays: Vec<cursor::LineNumberOverlay>,
     /// The last previewed table's layout, the copy of the document it was laid out from and the
     /// copy's selection, with what it was laid out for (command, params, document id, revision,
     /// selection, and the document's own layout, which a view change replaces), so a still pointer
     /// doesn't lay the document out every frame. Set only while the page shows the preview.
     table_preview_layout: Option<(TablePreviewKey, wordcraft_doc::Document, wordcraft_engine::Selection, Arc<DocLayout>)>,
+}
+
+/// Active scrollbar-thumb drag tracked by the canvas so multi-frame drags keep advancing smoothly
+/// if `CanvasScrollbars`'s `Bind::given` gesture is cancelled by pixel alignment or rounding.
+#[derive(Clone, Copy, Debug)]
+struct ScrollbarDrag {
+    axis: craft::behavior::Axis,
+    anchor_pos: Pos2,
+    anchor_offset: f64,
+    dragging: bool,
 }
 
 type TablePreviewKey = ((String, serde_json::Value, u64, u64, wordcraft_engine::Selection), Arc<DocLayout>);
@@ -450,6 +466,8 @@ impl Default for CanvasState {
             command_previewed: None,
             list_preview: None,
             preview_scroll: None,
+            scrollbar_drag: None,
+            line_number_overlays: Vec::new(),
             table_preview_layout: None,
         }
     }
@@ -475,9 +493,11 @@ fn update_viewport(app: &mut WordApp, full: Rect, metrics: &ReadingMetrics, side
         if app.session.view.mode == wordcraft_layout::ViewMode::Web {
             // Web Layout wraps to the work area (#1876).
             let scale = app.session.view.zoom.clamp(0.1, 5.0) * PX_PER_PT;
-            // The page view keeps its side gutter (the rail width) clear on both sides of a page, so the page
-            // fits the window only when its width leaves that room.
-            let w = web_layout_width((full.width() - 2.0 * side).max(0.0), scale);
+            // The page view keeps its side gutter (the rail width) clear on both sides of a page,
+            // and Spotlight needs its badge gutter beside the page when enabled, so Web Layout
+            // leaves whichever is wider clear without triggering horizontal overflow.
+            let clear = side.max(crate::spotlight::gutter(app));
+            let w = web_layout_width((full.width() - 2.0 * clear).max(0.0), scale);
             let changed = (app.session.view.web_width - w).abs() > 0.5;
             // At once on entry or a zoom (the viewport holds still), after a window drag has settled.
             if app.canvas.web_viewport.apply(full.size(), ctx.input(|i| i.time), changed, false) {
@@ -709,7 +729,7 @@ fn show_reading(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: R
     let columns = Rect::from_min_max(full.min, pos2(full.max.x, (full.max.y - metrics.nav_bar).max(full.min.y)));
     let footer = Rect::from_min_max(pos2(full.min.x, columns.max.y), full.max);
     let mut state = std::mem::take(&mut app.canvas.reading);
-    let source = source::WordPages::new(app, layout, false, None, None);
+    let source = source::WordPages::new(app, layout, false, None);
     let out = ReadingView::new(tl!("Document"), &source, &mut state, paper).zoom(zoom).show_at(ui, columns);
     let nav = ui
         .scope_builder(egui::UiBuilder::new().max_rect(footer), |ui| {
@@ -746,15 +766,113 @@ pub fn show(app: &mut WordApp, ui: &mut Ui) {
     }
 }
 
+/// Thumb rectangle, scrollable room (screen points) and thumb travel (screen points) for one
+/// docked scrollbar track inside `view_rect`, matching `craft::ui::canvas::CanvasScrollbars`.
+fn scrollbar_thumb_metrics(
+    track: Rect,
+    axis: craft::behavior::Axis,
+    rtl: bool,
+    min_thumb: f32,
+    content_len: f64,
+    view_len: f64,
+    offset: f64,
+) -> (Rect, f64, f64) {
+    let room = (content_len - view_len).max(0.0);
+    let start = offset.clamp(0.0, room);
+    let span = craft::behavior::ScrollSpan::new(0.0..content_len.max(view_len), start..(start + view_len));
+    let track_len = if axis == craft::behavior::Axis::X { track.width() } else { track.height() };
+    let (at, len) = craft::behavior::scroll::thumb(&span, track_len, min_thumb);
+    let travel = f64::from((track_len - len).max(0.0));
+    let rect = match axis {
+        craft::behavior::Axis::X if rtl => Rect::from_min_size(pos2(track.max.x - at - len, track.min.y), vec2(len, track.height())),
+        craft::behavior::Axis::X => Rect::from_min_size(pos2(track.min.x + at, track.min.y), vec2(len, track.height())),
+        _ => Rect::from_min_size(pos2(track.min.x, track.min.y + at), vec2(track.width(), len)),
+    };
+    (rect, room, travel)
+}
+
+/// Continues an active scrollbar-thumb drag when `PageView`'s `CanvasScrollbars` stops responding
+/// mid-drag (its `Bind::given(shown)` gesture cancels on the second drag frame whenever
+/// `pixel_aligned` or float round-trip alters `shown.center`). Becomes a no-op whenever
+/// `PageView` itself moved `state.offset` during the pass.
+fn continue_scrollbar_drag(
+    app: &mut WordApp,
+    ui: &Ui,
+    view_rect: Rect,
+    layout: &craft::pages::layout::PagedLayout,
+    offset_before: (f64, f64),
+    state: &mut PageViewState,
+) {
+    use craft::behavior::Axis;
+    let env = Env::of(ui);
+    let thickness = env.tokens.size.handle.sm;
+    let min_thumb = env.tokens.size.handle.md * 2.0;
+    let slop = env.tokens.size.hit.slop;
+    let rtl = env.view().direction().is_rtl();
+    let (vw, vh) = (f64::from(view_rect.width()), f64::from(view_rect.height()));
+    let (cw, ch) = (layout.size.width, layout.size.height);
+    if !(vw > 0.0 && vh > 0.0 && cw > 0.0 && ch > 0.0) {
+        app.canvas.scrollbar_drag = None;
+        return;
+    }
+    let right = view_rect.right() - thickness;
+    let bottom = view_rect.bottom() - thickness;
+    let h_track = Rect::from_min_max(pos2(view_rect.left(), bottom), pos2(right, view_rect.bottom()));
+    let v_track = Rect::from_min_max(pos2(right, view_rect.top()), pos2(view_rect.right(), bottom));
+    let (h_thumb, h_room, h_travel) = scrollbar_thumb_metrics(h_track, Axis::X, rtl, min_thumb, cw, vw, offset_before.0);
+    let (v_thumb, v_room, v_travel) = scrollbar_thumb_metrics(v_track, Axis::Y, rtl, min_thumb, ch, vh, offset_before.1);
+
+    let (pressed, down, press_origin, pos) = ui.input(|i| {
+        let p = &i.pointer;
+        (p.primary_pressed(), p.primary_down(), p.press_origin(), p.interact_pos().or_else(|| p.latest_pos()))
+    });
+    if pressed {
+        app.canvas.scrollbar_drag = None;
+        if let Some(at) = press_origin.or(pos) {
+            if h_room > 0.5 && h_travel > 0.0 && h_thumb.contains(at) {
+                app.canvas.scrollbar_drag = Some(ScrollbarDrag { axis: Axis::X, anchor_pos: at, anchor_offset: offset_before.0, dragging: false });
+            } else if v_room > 0.5 && v_travel > 0.0 && v_thumb.contains(at) {
+                app.canvas.scrollbar_drag = Some(ScrollbarDrag { axis: Axis::Y, anchor_pos: at, anchor_offset: offset_before.1, dragging: false });
+            }
+        }
+    }
+    if !down {
+        app.canvas.scrollbar_drag = None;
+        return;
+    }
+    let (Some(mut drag), Some(at)) = (app.canvas.scrollbar_drag, pos) else { return };
+    let (cur, before, room, travel, sign) = match drag.axis {
+        Axis::X => (state.offset.0, offset_before.0, h_room, h_travel, if rtl { -1.0 } else { 1.0 }),
+        _ => (state.offset.1, offset_before.1, v_room, v_travel, 1.0),
+    };
+    if (cur - before).abs() > 1e-6 {
+        drag.dragging = true;
+        drag.anchor_pos = at;
+        drag.anchor_offset = cur;
+    } else if (drag.dragging || at.distance(drag.anchor_pos) >= slop) && room > 0.0 && travel > 0.0 {
+        drag.dragging = true;
+        let delta = if drag.axis == Axis::X { at.x - drag.anchor_pos.x } else { at.y - drag.anchor_pos.y };
+        let target = (drag.anchor_offset + f64::from(sign * delta) * room / travel).clamp(0.0, room);
+        if (target - cur).abs() > 1e-6 {
+            match drag.axis {
+                Axis::X => state.offset.0 = target,
+                _ => {
+                    state.offset.1 = target;
+                    if state.continuous && !layout.rects.is_empty() {
+                        let mid = target + vh / 2.0;
+                        let last = layout.rects.len().saturating_sub(1);
+                        state.current = layout.rects.iter().zip(&layout.bands).position(|(r, &(_, b))| r.y0 + b + 0.5 > mid).unwrap_or(last);
+                    }
+                }
+            }
+            ui.ctx().request_repaint();
+        }
+    }
+    app.canvas.scrollbar_drag = Some(drag);
+}
+
 /// The page view and everything shown over it.
 fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rect) {
-    let gutter = crate::spotlight::gutter(app);
-    let full = if gutter > 0.0 {
-        let left = if crate::spotlight::on_left(app) { gutter } else { 0.0 };
-        Rect::from_min_max(full.min + vec2(left, 0.0), full.max - vec2(gutter - left, 0.0))
-    } else {
-        full
-    };
     // The document's layout the pages are drawn from: the pass's keys and press run inside the page view, after the
     // pages took it.
     let laid_before = app.session.layout();
@@ -776,6 +894,7 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     let synced = f64::from(std::mem::take(&mut app.canvas.sync_in)) * scale;
     state.offset.1 += synced;
     let held = hold_scroll_for_preview(app, &mut state.offset);
+    let offset_before = state.offset;
     let started_at = state.offset.1;
 
     let caret = layout.caret_on(&preview_sel(app).unwrap_or(app.session.sel_ends()).focus, app.session.page_hint);
@@ -792,12 +911,16 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     let show_rulers = app.session.view.ruler
         && app.session.view.mode == wordcraft_layout::ViewMode::Print
         && crate::chrome::Screen::of(&app.session.view) == crate::chrome::Screen::Normal;
+    let view_rect = if show_rulers {
+        let (top, left) = craft::ui::canvas::Rulers::strips(ui, full);
+        Rect::from_min_max(pos2(left.max.x.min(full.max.x), top.max.y.min(full.max.y)), full.max)
+    } else {
+        full
+    };
     let options =
         LayoutOptions { markup: f64::from(markup_width(app)), min_columns: if app.session.view.multi_page { 2 } else { 1 }, ..LayoutOptions::WORD };
     let paper = DataColor::new(paper_color(app));
-    let focused = app.canvas.focused(ui.ctx()) && ui.input(|i| i.focused);
-    let relative_origin = cursor::relative_line_origin(app, layout, focused);
-    let source = source::WordPages::new(app, layout, dim_body, hidden, relative_origin);
+    let source = source::WordPages::new(app, layout, dim_body, hidden);
     // The describer owns its snapshot, as the source does, so the page view can hold it while the body edits the app.
     let described = preview_sel(app).unwrap_or(app.session.sel_ends()).clone();
     let describer = crate::a11y::DocumentDescriber::new(source.doc(), layout.clone(), (described.anchor.clone(), described.focus.clone()));
@@ -806,7 +929,7 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     let mut tool_response: Option<ToolHostResponse> = None;
     let mut strip_click: Option<Pos2> = None;
     let mut caret_after = None;
-    let mut body_rect = full;
+    let mut body_rect = view_rect;
     let mut body_view = None;
     let mut ran = false;
     let mut fix = ScrollFix::default();
@@ -818,11 +941,11 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
         .bodies(&bodies)
         .navigation(navigation_options())
         .editor(craft::ui::primitives::EditorPurpose::Text)
-        .rulers(show_rulers)
+        .rulers(false)
         .snap(crate::objects::snap(app, layout))
         .tool_regions(regions)
         .access(&describer)
-        .show_at(ui, full, |ui, body| {
+        .show_at(ui, view_rect, |ui, body| {
             body_rect = body.rect;
             body_view = Some(body.view);
             // Canvas controls take their presses first, then the tool host runs, then the caret shows over them.
@@ -887,8 +1010,11 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     let caret = caret_after.or(caret);
     let rects = laid_rects(&out);
     let focused = app.canvas.focused(ui.ctx()) && ui.input(|i| i.focused);
+    let relative_origin = cursor::relative_line_origin(app, layout, focused);
+    cursor::paint_helix_line_numbers(app, ui, layout, &out.pages, view_rect, dim_body, relative_origin);
     let tokens = crate::theme::Tokens::get(ui.ctx());
-    cursor::paint_helix_cursorline(app, ui.painter(), layout, &rects, 1.0, focused, &tokens);
+    let clipped_painter = ui.painter().with_clip_rect(view_rect);
+    cursor::paint_helix_cursorline(app, &clipped_painter, layout, &rects, 1.0, focused, &tokens);
     if crate::keys::helix::block_caret(app)
         && let Some(c) = layout.caret_on(&wordcraft_engine::cmd::helix::cursor(&app.session), app.session.page_hint)
         && let (Some(page), Some(rect)) = (layout.pages.get(c.page), rects.get(c.page))
@@ -897,9 +1023,9 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
         let top_left = rect.min + vec2(c.x * scale, c.top * scale);
         let bar = [top_left, pos2(top_left.x, top_left.y + c.height * scale)];
         let color = cursor::caret_color_on(app, layout, c.page, c.x, c.top);
-        cursor::paint_caret_bar(ui.painter(), bar, color, 1.0, Some(c.height * scale));
+        cursor::paint_caret_bar(&clipped_painter, bar, color, 1.0, Some(c.height * scale));
     }
-    crate::spotlight::show(app, ui, layout, &rects, &out.layout.bands);
+    crate::spotlight::show(app, ui, layout, &rects, &out.layout.bands, view_rect);
     app.canvas.page_keys = source.into_keys();
     // This pass's own input changed the document under the pages it drew: run the pass again, so the frame that
     // delivers a key paints its text (production laid out and painted in the one pass) rather than the next frame.
@@ -923,13 +1049,14 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     // While the body's rect is still settling (the chrome around the page is measured over the first passes) the follow
     // waits, and moves the view once against the rect the page keeps: a move made against a passing rect would leave the
     // caret where that rect put it.
-    if ran && app.canvas.shown.rect != body_rect {
+    if ran && app.canvas.shown.view != body_rect {
         fix = ScrollFix::default();
         ui.ctx().request_repaint();
     } else if ran && fix.go_to.is_none() {
         app.canvas.scroll_to_caret = false;
     }
 
+    continue_scrollbar_drag(app, ui, view_rect, &out.layout, offset_before, &mut state);
     // The scroll position the body asked for takes effect on the state the pass stored.
     let moved_by_user = state.offset.1 - started_at;
     if fix.delta != (0.0, 0.0) {
@@ -983,7 +1110,7 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
     // without a click; a modal dialog keeps the keyboard until it closes.
     let view_rect = body_view.map_or(body_rect, |v| v.rect);
     app.canvas.shown =
-        ShownPages { rect: body_rect, pages: out.pages.clone(), laid: laid_rects(&out), view: view_rect, canvas: Some(out.canvas.response.id) };
+        ShownPages { rect: full, pages: out.pages.clone(), laid: laid_rects(&out), view: view_rect, canvas: Some(out.canvas.response.id) };
     if app.canvas.focus_pending && !app.modal_open() {
         let ctx = ui.ctx().clone();
         app.canvas.focus_page(&ctx);
@@ -1002,7 +1129,11 @@ fn show_pages(app: &mut WordApp, ui: &mut Ui, layout: &Arc<DocLayout>, full: Rec
         app.canvas.mini_dismissed = None;
     }
     balloons::balloons(app, ui, &out, layout);
-    rulers::page_rulers(app, ui, &out, layout);
+    if show_rulers {
+        rulers::page_rulers(app, ui, &out, layout);
+    } else {
+        app.canvas.ruler_gesture = None;
+    }
     // The one context-menu ask of the pass: Shift+F10 or `ui.contextMenu` (below the caret), a click on the equation
     // frame's options strip, then the tool host's own request by how it was asked for.
     let ask = app.canvas.context_request.take().or_else(|| strip_click.map(ContextAsk::AtPointer));

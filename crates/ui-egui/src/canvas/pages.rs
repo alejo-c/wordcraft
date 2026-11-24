@@ -1,5 +1,15 @@
 use super::{DocLayout, Hash, Hasher, Page, Placed, Pos, Rect, WordApp, json};
 
+/// Whether Helix manages line numbers through a lightweight screen overlay instead of baking them
+/// into cached page rasters, so moving the caret never invalidates page tiles or drops detail
+/// textures in Web Layout.
+pub(super) fn helix_overlay_line_numbers(app: &WordApp) -> bool {
+    app.ui.helix_editing
+        && !app.session.view.read_mode
+        && preview_sel(app).is_none()
+        && !app.helix_config.as_ref().is_some_and(|c| c.absolute_line_numbers)
+}
+
 /// Fingerprint of everything outside the layout that changes how pages render: the view's
 /// marks and markup, dark mode, the page colour and watermark, header/body dimming, the media,
 /// and (while a drag lasts) the object left out of the page.
@@ -9,7 +19,17 @@ use super::{DocLayout, Hash, Hasher, Page, Placed, Pos, Rect, WordApp, json};
 pub(super) fn view_key(app: &WordApp, dim_body: bool, hidden: Option<&Pos>) -> u64 {
     let mut h = std::collections::hash_map::DefaultHasher::new();
     let v = &app.session.view;
-    (v.marks, app.session.prefs.marks, v.show_markup, v.dark_mode, wordcraft_render::DARK_PAPER, v.hide_ink, v.draw.replay).hash(&mut h);
+    (
+        v.marks,
+        app.session.prefs.marks,
+        v.show_markup,
+        v.dark_mode,
+        wordcraft_render::DARK_PAPER,
+        v.hide_ink,
+        v.draw.replay,
+        helix_overlay_line_numbers(app),
+    )
+        .hash(&mut h);
     (v.read_mode, v.read_page_color, app.session.prefs.paper_color).hash(&mut h);
     app.session.prefs.markup.hash(&mut h);
     dim_body.hash(&mut h);
@@ -179,6 +199,7 @@ pub(super) fn page_render_options(app: &WordApp, dim_body: bool) -> wordcraft_re
     }
     opts.display.dim_header = !dim_body;
     opts.display.dim_body = dim_body;
+    opts.display.hide_line_numbers = helix_overlay_line_numbers(app);
     opts
 }
 

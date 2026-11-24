@@ -903,6 +903,35 @@ impl crate::DocLayout {
 }
 
 impl Page {
+    /// Visible line-number items intersecting `visible_y` (in page points), with relative
+    /// distances applied when `current` is `Some(ordinal)`.
+    pub fn line_number_items(&self, doc: &Document, current: Option<u32>, visible_y: (f32, f32)) -> Vec<Placed> {
+        let mut out = Vec::new();
+        let mut numbers = HashMap::new();
+        for item in &self.items {
+            let Placed::Lines { story: DECOR_STORY, path, para, l0, l1, x, y, turn } = item else { continue };
+            let &[LINE_NUMBER_PATH, ordinal] = path.0.as_slice() else { continue };
+            let (top, bottom) = item.vertical_span();
+            if bottom < visible_y.0 || top > visible_y.1 {
+                continue;
+            }
+            let (mut x, mut y, mut para) = (*x, *y, para.clone());
+            if let Some(cur) = current
+                && ordinal != cur
+            {
+                let n = ordinal.abs_diff(cur);
+                let relative = numbers.entry(n).or_insert_with(|| super::ctx::line_number_para(doc, self.line_number_numeral, n));
+                if let (Some(old), Some(new)) = (para.lines.first(), relative.lines.first()) {
+                    x += old.xs.last().copied().unwrap_or(10.0) - new.xs.last().copied().unwrap_or(10.0);
+                    y += old.baseline - new.baseline;
+                }
+                para = relative.clone();
+            }
+            out.push(Placed::Lines { story: DECOR_STORY, path: path.clone(), para, l0: *l0, l1: *l1, x, y, turn: *turn });
+        }
+        out
+    }
+
     pub fn with_relative_line_numbers(&self, doc: &Document, current: u32) -> Self {
         let mut page = self.clone();
         let mut numbers = HashMap::new();

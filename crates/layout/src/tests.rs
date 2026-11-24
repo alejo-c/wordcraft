@@ -3745,6 +3745,14 @@ fn web_view_is_one_page() {
 #[test]
 fn web_line_numbers_use_a_fixed_compact_gutter() {
     let mut d = Document::from_text("one\ntwo\nthree");
+    d.last_section.line_numbers = Some(wordcraft_doc::section::LineNumbering { start: 1, distance: 72.0, ..Default::default() });
+    let default_web = layout(&d, &mut LayoutCache::new(), &LayoutOptions { view: ViewMode::Web, web_width: 800.0, ..Default::default() });
+    assert!(
+        default_web.pages[0].body.x > 18.0 && default_web.pages[0].body.x < 36.0,
+        "ordinary Web Layout line numbers keep a compact left margin (got {})",
+        default_web.pages[0].body.x
+    );
+
     d.last_section.line_numbers = Some(wordcraft_doc::section::LineNumbering { start: 32_767, distance: 72.0, ..Default::default() });
     for margin in [36.0, 144.0] {
         d.last_section.margin_left = margin;
@@ -3754,8 +3762,12 @@ fn web_line_numbers_use_a_fixed_compact_gutter() {
             let opts = LayoutOptions { view: ViewMode::Web, web_width: width, ..Default::default() };
             let web = layout(&d, &mut LayoutCache::new(), &opts);
             let page = &web.pages[0];
-            assert_eq!(page.body.x, 48.0);
-            assert_eq!(page.body.w, width - 48.0 - 18.0);
+            assert!(
+                page.body.x >= default_web.pages[0].body.x && page.body.x < 48.0,
+                "5-digit Web Layout line numbers widen just enough without excess margin (got {})",
+                page.body.x
+            );
+            assert_eq!(page.body.w, width - page.body.x - 18.0);
             assert_eq!(page.numbered_lines.len(), 3);
             assert_eq!(web.line_number_at(&Pos::body(1, 0), 0), Some(2));
             for numbers in [page.clone(), page.with_relative_line_numbers(&d, 2)] {
@@ -3781,6 +3793,25 @@ fn web_line_numbers_use_a_fixed_compact_gutter() {
     let web = layout(&d, &mut LayoutCache::new(), &LayoutOptions { view: ViewMode::Web, ..Default::default() });
     assert_eq!(web.pages[0].body.x, 18.0);
     assert!(web.pages[0].numbered_lines.is_empty());
+}
+
+#[test]
+fn hide_line_numbers_and_line_number_draws_split_overlay_cleanly() {
+    let mut d = Document::from_text("first\nsecond\nthird\nfourth");
+    d.last_section.line_numbers = Some(Default::default());
+    let l = layout(&d, &mut LayoutCache::new(), &LayoutOptions { view: ViewMode::Web, web_width: 600.0, ..Default::default() });
+    let page = &l.pages[0];
+    let full = crate::display::page_display(&d, page, &crate::display::DisplayOptions::default());
+    let hidden_opts = crate::display::DisplayOptions { hide_line_numbers: true, ..Default::default() };
+    let hidden = crate::display::page_display(&d, page, &hidden_opts);
+    assert!(hidden.len() < full.len(), "hiding line numbers omits their draw items from the page raster");
+
+    let (area, draws) = crate::display::line_number_draws(&d, page, Some(2), (0.0, page.h), &hidden_opts);
+    let area = area.expect("overlay bounds returned");
+    assert!(area.x >= 0.0 && area.right() <= page.body.x, "overlay stays in the left margin: {area:?}");
+    assert_eq!(draws.len(), 4, "all four line numbers are drawn in the overlay");
+    let (_, partial) = crate::display::line_number_draws(&d, page, Some(2), (0.0, 20.0), &hidden_opts);
+    assert!(partial.len() < draws.len(), "visible_y filters out offscreen line numbers");
 }
 
 #[test]

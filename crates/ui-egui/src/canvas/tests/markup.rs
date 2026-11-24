@@ -242,6 +242,179 @@ fn ruler_tab_stops_are_set_moved_and_cleared_with_the_pointer() {
     assert_eq!(stops(&h), first);
 }
 
+/// Rulers hide when `View › Show › Ruler` is turned off and in non-Print views such as Web Layout,
+/// while Web Layout keeps its compact line-number gutter and Helix relative line numbers.
+#[test]
+fn rulers_hide_when_toggled_off_and_in_web_layout() {
+    let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("First\nSecond\nThird")), Default::default());
+    a.run("view.ruler", json!({"value": true})).unwrap();
+    a.run("ui.helix", json!({"value": true})).unwrap();
+    a.run("layout.lineNumbers", json!({"restart": "continuous"})).unwrap();
+    let mut h = window(a);
+    let has_rulers = |h: &H| {
+        h.query_by_label("Left Margin").is_some()
+            || h.query_by_label("Top Margin").is_some()
+            || h.query_all_by_label_contains("Tab Selector").next().is_some()
+    };
+    assert!(has_rulers(&h), "rulers show in Print Layout when enabled");
+    assert_ne!(h.state().canvas.view_rect(), h.state().canvas.canvas_rect(), "rulers inset the view");
+
+    h.state_mut().run("view.ruler", json!({"value": false})).unwrap();
+    steps(&mut h, 3);
+    assert!(!has_rulers(&h), "turning View › Ruler off hides the rulers");
+    assert_eq!(h.state().canvas.view_rect(), h.state().canvas.canvas_rect(), "hidden rulers take no room");
+
+    h.state_mut().run("view.ruler", json!({"value": true})).unwrap();
+    steps(&mut h, 3);
+    assert!(has_rulers(&h), "turning View › Ruler back on shows the rulers again");
+
+    h.state_mut().run("view.webLayout", json!({})).unwrap();
+    h.state_mut().run("caret.helix", json!({"motion": "down", "count": 1})).unwrap();
+    let ctx = h.ctx.clone();
+    h.state_mut().canvas.focus_page(&ctx);
+    steps(&mut h, 4);
+    assert!(!has_rulers(&h), "Web Layout hides the rulers even when View › Ruler is checked");
+    let layout = h.state_mut().session.layout();
+    assert!(
+        layout.pages[0].body.x > 18.0 && layout.pages[0].body.x < 36.0,
+        "Web Layout keeps a compact line-number margin (got {})",
+        layout.pages[0].body.x
+    );
+    assert_eq!(
+        cursor::relative_line_origin(h.state(), &layout, true),
+        Some(2),
+        "Helix relative line numbers stay active on the caret line in Web Layout"
+    );
+}
+
+/// Spotlight leaves the full canvas viewport intact (no 100 px vertical blank strip clipping the
+/// page margin on horizontal scroll) and reserves badge room in Web Layout without overflowing.
+#[test]
+fn spotlight_does_not_inset_canvas_or_overflow_web_layout() {
+    let mut a = WordApp::new(
+        wordcraft_engine::Session::new(wordcraft_doc::Document::from_text(&"Paragraph text for spotlight layout. ".repeat(40))),
+        Default::default(),
+    );
+    a.run("view.ruler", json!({"value": false})).unwrap();
+    let mut h = window(a);
+    let canvas_without = h.state().canvas.canvas_rect().expect("canvas rect");
+    let view_without = h.state().canvas.view_rect().expect("view rect");
+
+    h.state_mut().run("ui.spotlight", json!({"value": true})).unwrap();
+    steps(&mut h, 4);
+    let canvas_with = h.state().canvas.canvas_rect().expect("canvas rect with spotlight");
+    let view_with = h.state().canvas.view_rect().expect("view rect with spotlight");
+    assert_eq!(canvas_with.left(), canvas_without.left(), "Spotlight must not shift the canvas left edge");
+    assert_eq!(view_with.left(), view_without.left(), "Spotlight must not clip the viewport with a left strip");
+
+    h.state_mut().run("view.webLayout", json!({})).unwrap();
+    steps(&mut h, 4);
+    let view = h.state().canvas.view_rect().expect("web view rect");
+    let page = h.state().canvas.laid_page_rects()[0];
+    assert!(page.left() >= view.left() + 96.0, "Web Layout leaves pasteboard room for Spotlight badges: {page:?} in {view:?}");
+    assert!(page.right() <= view.right() - 96.0, "Web Layout fits inside viewport without horizontal overflow: {page:?} in {view:?}");
+}
+
+/// Multi-frame dragging of the horizontal scrollbar thumb in Print Layout (with rulers enabled at
+/// 300% zoom) advances smoothly across many frames all the way to the right scroll limit, never
+/// gets stuck after early frames or snaps back on release, and drags smoothly back left.
+#[test]
+fn horizontal_scrollbar_thumb_drags_smoothly_to_right_edge_in_print_layout() {
+    let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text("Zoomed print document")), Default::default());
+    a.run("view.ruler", json!({"value": true})).unwrap();
+    a.run("view.zoom", json!({"value": 300})).unwrap();
+    let mut h = window(a);
+    let view = h.state().canvas.view_rect().expect("view rect");
+    let page = h.state().canvas.laid_page_rects()[0];
+    assert!(page.width() > view.width() + 400.0, "300% Print Layout page must be much wider than viewport");
+
+    let start_offset = h.state().canvas.view.offset.0;
+    let bar =
+        h.query_all_by_role(egui::accesskit::Role::ScrollBar).find(|node| node.rect().width() > node.rect().height()).expect("horizontal scrollbar");
+    let track = bar.rect();
+    // Grab inside the horizontal thumb near the left and drag right across the track in 12 small steps.
+    let from = pos2(track.left() + track.width() * 0.15, track.center().y);
+    let to = pos2(track.right() - 2.0, track.center().y);
+
+    h.event(egui::Event::PointerMoved(from));
+    h.app_frame();
+    h.event(button(from, egui::PointerButton::Primary, true));
+    h.app_frame();
+
+    let mut offsets = Vec::new();
+    for k in 1..=12 {
+        let p = from + (to - from) * (k as f32 / 12.0);
+        h.event(egui::Event::PointerMoved(p));
+        h.app_frame();
+        offsets.push(h.state().canvas.view.offset.0);
+    }
+    let at_end = *offsets.last().unwrap();
+    assert!(offsets[0] > start_offset + 5.0, "drag moves right on early step: start={start_offset}, offsets={offsets:?}");
+    assert!(offsets[4] > offsets[1] + 20.0, "drag keeps moving past frame 2 instead of getting stuck: offsets={offsets:?}");
+    assert!(at_end > offsets[4] + 20.0, "drag continues all the way to the right limit: offsets={offsets:?}");
+
+    h.event(button(to, egui::PointerButton::Primary, false));
+    steps(&mut h, 3);
+    let after_release = h.state().canvas.view.offset.0;
+    assert!((after_release - at_end).abs() < 1.0, "releasing the horizontal thumb must not snap back: before={at_end}, after={after_release}");
+    let page_right_scrolled = h.state().canvas.laid_page_rects()[0];
+    assert!(
+        page_right_scrolled.right() <= view.right() + 2.0,
+        "dragging to the right edge brings the right edge of the page into view: page={page_right_scrolled:?}, view={view:?}"
+    );
+
+    // Drag smoothly back to the left edge.
+    let back_from = pos2(track.right() - track.width() * 0.15, track.center().y);
+    let back_to = pos2(track.left() + 2.0, track.center().y);
+    h.event(egui::Event::PointerMoved(back_from));
+    h.app_frame();
+    h.event(button(back_from, egui::PointerButton::Primary, true));
+    h.app_frame();
+    for k in 1..=12 {
+        let p = back_from + (back_to - back_from) * (k as f32 / 12.0);
+        h.event(egui::Event::PointerMoved(p));
+        h.app_frame();
+    }
+    h.event(button(back_to, egui::PointerButton::Primary, false));
+    steps(&mut h, 3);
+    assert!(h.state().canvas.view.offset.0 < 1.0, "dragging left returns to the left edge: {}", h.state().canvas.view.offset.0);
+}
+
+/// Moving the cursor across lines in Web Layout with Helix and line numbers enabled keeps
+/// `WordPages::revision` unchanged so cached page/detail textures are never dropped on movement.
+#[test]
+fn helix_cursor_movement_keeps_page_revision_stable_in_web_layout() {
+    use craft::ui::primitives::textures::{ThumbRequest, ThumbSource as _};
+
+    let mut a = WordApp::new(wordcraft_engine::Session::new(wordcraft_doc::Document::from_text(&"Line of text\n".repeat(40))), Default::default());
+    a.run("ui.helix", json!({"value": true})).unwrap();
+    a.run("layout.lineNumbers", json!({"restart": "continuous"})).unwrap();
+    a.run("view.webLayout", json!({})).unwrap();
+    let mut h = window(a);
+    let ctx = h.ctx.clone();
+    h.state_mut().canvas.focus_page(&ctx);
+    steps(&mut h, 3);
+
+    let layout = h.state_mut().session.layout();
+    let req = ThumbRequest::for_cell(1024.0, 1.0);
+    let source_a = source::WordPages::new(h.state_mut(), &layout, false, None);
+    let rev_a = source_a.revision(&0, &req);
+    h.state_mut().canvas.page_keys = source_a.into_keys();
+    let origin_a = cursor::relative_line_origin(h.state(), &layout, true);
+
+    h.state_mut().run("caret.helix", json!({"motion": "down", "count": 3})).unwrap();
+    steps(&mut h, 3);
+    let layout_b = h.state_mut().session.layout();
+    let source_b = source::WordPages::new(h.state_mut(), &layout_b, false, None);
+    let rev_b = source_b.revision(&0, &req);
+    h.state_mut().canvas.page_keys = source_b.into_keys();
+    let origin_b = cursor::relative_line_origin(h.state(), &layout_b, true);
+
+    assert_ne!(origin_a, origin_b, "caret moved to a different numbered line");
+    assert_eq!(rev_a, rev_b, "Helix cursor movement must not invalidate WordPages::revision");
+    assert!(!h.state().canvas.line_number_overlays.is_empty(), "Helix renders visible line numbers through the screen overlay cache");
+}
+
 // ---------------------------------------------------------------------------------------
 // Comment balloons and drafts
 // ---------------------------------------------------------------------------------------

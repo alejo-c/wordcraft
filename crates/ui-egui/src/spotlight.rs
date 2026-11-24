@@ -83,8 +83,12 @@ fn paint_page(document: &Document, page: &Page, ui: &Ui, page_rect: Rect, clip: 
     }
 }
 
-pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[Rect], bands: &[(f64, f64)]) {
+pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[Rect], bands: &[(f64, f64)], viewport: Rect) {
     if !app.ui.spotlight {
+        return;
+    }
+    let viewport = viewport.intersect(ui.clip_rect());
+    if !viewport.is_positive() {
         return;
     }
     let left = on_left(app);
@@ -94,7 +98,6 @@ pub(crate) fn show(app: &crate::WordApp, ui: &Ui, layout: &DocLayout, rects: &[R
         let Some(rect) = rects.get(index).copied() else { continue };
         let Some(&(top, bottom)) = bands.get(index) else { continue };
         let (top, bottom) = (top as f32, bottom as f32);
-        let viewport = ui.clip_rect();
         let band = Rect::from_min_max(pos2(viewport.left(), rect.top() + top), pos2(viewport.right(), rect.top() + bottom));
         let clip = viewport.intersect(band);
         let edge = if left { rect.left() } else { rect.right() + markup * (rect.width() / page.w) };

@@ -91,6 +91,46 @@ pub fn page_layers(doc: &Document, page: &Page, opts: &DisplayOptions) -> [(f32,
     [(ha, hf), (ba, body)]
 }
 
+/// Draw items for only the visible line numbers on `page` intersecting `visible_y` (page points),
+/// applying relative distances when `current` is `Some(ordinal)`. Returns their padded page-point
+/// bounds alongside the draw items so the UI can paint them as a transparent screen overlay.
+pub fn line_number_draws(
+    doc: &Document,
+    page: &Page,
+    current: Option<u32>,
+    visible_y: (f32, f32),
+    opts: &DisplayOptions,
+) -> (Option<Rect>, Vec<Draw>) {
+    let items = page.line_number_items(doc, current, visible_y);
+    if items.is_empty() {
+        return (None, Vec::new());
+    }
+    let mut bounds: Option<(f32, f32, f32, f32)> = None;
+    for it in &items {
+        let Placed::Lines { para, l0, l1, x, .. } = it else { continue };
+        let w = para.lines[*l0..(*l1).min(para.lines.len())].iter().filter_map(|l| l.xs.last().copied()).fold(0.0_f32, f32::max);
+        let (top, bottom) = it.vertical_span();
+        let (x0, y0, x1, y1) = (*x - 2.0, top - 4.0, *x + w + 2.0, bottom + 4.0);
+        bounds = Some(match bounds {
+            Some((bx0, by0, bx1, by1)) => (bx0.min(x0), by0.min(y0), bx1.max(x1), by1.max(y1)),
+            None => (x0, y0, x1, y1),
+        });
+    }
+    let Some((x0, y0, x1, y1)) = bounds else {
+        return (None, Vec::new());
+    };
+    let rx = x0.max(0.0);
+    let ry = y0.max(0.0);
+    let area = Rect::new(rx, ry, (x1 - rx).max(1.0), (y1 - ry).max(1.0));
+    let mut draw_opts = opts.clone();
+    draw_opts.hide_line_numbers = false;
+    let (_, ba) = dimming(&draw_opts);
+    let authors = Authors::new(doc);
+    let mut out = Vec::new();
+    stories_display(doc, &[&items[..]], None, &draw_opts, &authors, ba, &mut out);
+    (Some(area), out)
+}
+
 /// The opacity of the headers/footers and of the body.
 fn dimming(opts: &DisplayOptions) -> (f32, f32) {
     let a = |dim: bool| if dim { 0.45 } else { 1.0 };
@@ -131,6 +171,13 @@ fn stories_display(
         for it in items.iter() {
             // The object being dragged is drawn by its preview instead: leave it out here.
             if hidden.as_ref().is_some_and(|h| h.hides(it)) {
+                continue;
+            }
+            if opts.hide_line_numbers
+                && let Placed::Lines { story, path, .. } = it
+                && *story == crate::DECOR_STORY
+                && matches!(path.0.as_slice(), [crate::flow::LINE_NUMBER_PATH, _])
+            {
                 continue;
             }
             // A line in a clipped cell is drawn in its clip; in a turned text box, with the box's
